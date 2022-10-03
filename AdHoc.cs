@@ -1,4 +1,31 @@
-﻿using System;
+﻿// AdHoc protocol - data interchange format and source code generator
+// Copyright 2020 Chikirev Sirguy, Unirail Group. All rights reserved.
+// cheblin@gmail.org
+// https://github.com/orgs/AdHoc-Protocol
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+// notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following disclaimer
+// in the documentation and/or other materials provided with the
+// distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -319,7 +346,7 @@ namespace org.unirail
 
                 public enum Error { TOO_SHORT_PACK = 0, CRC_ERROR = 1, BYTES_DISTORTION = 3 }
 
-                //todo переделать в лямбду
+                //todo replace with lambda?
                 public interface ErrorHandler
                 {
                     static ErrorHandler DEFAULT = new ToConsole();
@@ -793,7 +820,7 @@ namespace org.unirail
                         u8         = 0;
                         slot.state = 0;
                     }
-                    else // всё это постзаливка
+                    else // internal write
                         switch (mode)
                         {
                             case VAL8:
@@ -1215,7 +1242,7 @@ namespace org.unirail
                         return true;
                     }
 
-                bytes_left = remaining; // в bytes_left - сколько байт уже залито в buff
+                bytes_left = remaining; // in bytes_left - how many bytes in buff
                 buff       = ArrayPool<byte>.Shared.Rent(bytes_left + bytes_left / 2);
                 Buffer.BlockCopy(buffer!, BYTE, buff, 0, bytes_left);
                 slot!.state = (uint)get_string_case;
@@ -1535,14 +1562,15 @@ namespace org.unirail
                         }
 
                     mode = OK;                                          //restore the state
-                    for (INT.BytesSrc? src;;)                           //analyze the result of filling data
+                    for (INT.BytesSrc? src;;)                           
                         if ((src = slot!.src!.get_bytes(this)) == null) //not going deeper in the hierarchy
                         {
                             if (mode       < OK) goto exit; //there is not enough space in the provided buffer for further work
                             if (slot!.prev == null) break;  //it was the root level all packet data sent
+                            //slot.src = null               // do not do this. sometime can be used
                             free_slot();                    //return to the prev level and continue processing it
                         }
-                        else //go deeper into the hierarchy
+                        else //go into the hierarchy deeper
                         {
                             slot        = slot.next ?? (slot.next = new Slot(slot));
                             slot!.src   = src;
@@ -1550,7 +1578,7 @@ namespace org.unirail
                         }
 
                     int_src!.Sent(this, slot.src);
-                    slot.src = null; //data request label of the next packet
+                    slot.src = null; //sing of next packet data request 
                     if (assertion == Assertion.UNEXPECT) continue;
                     slot      = null;
                     assertion = Assertion.PACK_END;
@@ -1586,7 +1614,7 @@ namespace org.unirail
 #region bits
             private int bits_byte = -1;
 
-            public bool allocate(uint current_case) //space request (20 bytes) for at least one transaction is called once on the first varint, during init_bits
+            public bool allocate(uint current_case) //space request (20 bytes) for at least one transaction is called once on the first varint, as continue of `init_bits`
             {
                 if (17 < remaining) return true;
                 slot!.state = current_case;
