@@ -67,7 +67,7 @@ namespace org.unirail
         {
             public interface BytesDst
             {
-                BytesDst? put_bytes(Receiver src); 
+                BytesDst? put_bytes(Receiver src);
 
                 interface Consumer
                 {
@@ -94,16 +94,15 @@ namespace org.unirail
             var n = 7;
             i <<= 24;
             var y = i << 4;
-            if (y != 0)
+            if(y != 0)
             {
                 n -= 4;
                 i =  y;
             }
-
             y = i << 2;
             return (int)(y == 0
-                             ? n - (i     << 1 >> 31)
-                             : n - 2 - (y << 1 >> 31));
+                         ? n - (i     << 1 >> 31)
+                         : n - 2 - (y << 1 >> 31));
         }
 
         internal const uint OK       = int.MaxValue,
@@ -182,7 +181,7 @@ namespace org.unirail
 
                 public void Write(byte[]? src, int src_byte, int src_bytes)
                 {
-                    if (src == null)
+                    if(src == null)
                     {
                         dst.Write(null, 0, 0);
                         dec_bits  = 0;
@@ -193,15 +192,13 @@ namespace org.unirail
                         dec_state = State.NORMAL;
                         return;
                     }
-
                     //tood change to slice
-                    if (src_byte < 1)
+                    if(src_byte < 1)
                     {
                         dec_array[1] = src[src_byte++];
                         src_bytes--;
                         write_int(dec_array, 1, 1);
                     }
-
                     write_int(src, src_byte, src_bytes);
                 }
 
@@ -209,110 +206,99 @@ namespace org.unirail
                 // zero index is reserved for decoding purpose to prevent overlapping
                 private int write_int(byte[] src, int get, int count)
                 {
-                    if (count < 1) return 0;
+                    if(count < 1) return 0;
                     var limit = get + count;
                     var put   = 0;
-                    switch (dec_state)
+                    switch(dec_state)
                     {
                         case State.SEEK_FF_SYNC: //bytes distortion was detected, skip bytes until FF sync mark
-                            while (get < limit)
-                                if (src[get++] == 0xFF)
-                                {
-                                    dec_state = State.NORMAL;
-                                    if (get < limit) goto write;
-                                    return count;
-                                }
-
+                            while(get < limit)
+                                    if(src[get++] == 0xFF)
+                                    {
+                                        dec_state = State.NORMAL;
+                                        if(get < limit) goto write;
+                                        return count;
+                                    }
                             return count;
                         case State.PLACE1:
                             dec_bits |= (((dec_byte = src[get++]) & 1) << 7 | 0x7F) << dec_shift;
                             set(src, put++);
-                            goto case State.PLACE2;
+                        goto case State.PLACE2;
                         case State.PLACE2:
-                            while (dec_byte == 0x7F)
+                            while(dec_byte == 0x7F)
                             {
-                                if (!(get < limit))
-                                {
-                                    write(src, put, Assertion.SPACE_END, State.PLACE2, Error.BYTES_DISTORTION);
-                                    return count;
-                                }
-
+                                if(!(get < limit))
+                                    {
+                                        write(src, put, Assertion.SPACE_END, State.PLACE2, Error.BYTES_DISTORTION);
+                                        return count;
+                                    }
                                 dec_bits |= ((dec_byte = src[get++]) << 6 | 0x3F) << dec_shift;
-                                if ((dec_shift += 7) < 8) continue;
+                                if((dec_shift += 7) < 8) continue;
                                 dec_shift -= 8;
                                 set(src, put++);
                             }
-
                             dec_state =  State.NORMAL;
                             dec_bits  |= (dec_byte >> 1) << dec_shift;
-                            if ((dec_shift += 7) < 8) break;
+                            if((dec_shift += 7) < 8) break;
                             dec_shift -= 8;
                             set(src, put++);
                             break;
                     }
-
                     write:
-                    while (get < limit)
-                    {
-                        if ((dec_byte = src[get++]) == 0x7F)
+                    while(get < limit)
                         {
-                            if (!(get < limit))
+                            if((dec_byte = src[get++]) == 0x7F)
                             {
-                                write(src, put, Assertion.SPACE_END, State.PLACE1, Error.BYTES_DISTORTION);
-                                return count;
-                            }
-
-                            dec_bits |= (((dec_byte = src[get++]) & 1) << 7 | 0x7F) << dec_shift;
-                            set(src, put++);
-                            while (dec_byte == 0x7F)
-                            {
-                                if (!(get < limit))
-                                {
-                                    write(src, put, Assertion.SPACE_END, State.PLACE2, Error.BYTES_DISTORTION);
-                                    return count;
-                                }
-
-                                dec_bits |= (((dec_byte = src[get++]) & 1) << 6 | 0x3F) << dec_shift;
-                                if ((dec_shift += 7) < 8) continue;
-                                dec_shift -= 8;
+                                if(!(get < limit))
+                                    {
+                                        write(src, put, Assertion.SPACE_END, State.PLACE1, Error.BYTES_DISTORTION);
+                                        return count;
+                                    }
+                                dec_bits |= (((dec_byte = src[get++]) & 1) << 7 | 0x7F) << dec_shift;
                                 set(src, put++);
+                                while(dec_byte == 0x7F)
+                                {
+                                    if(!(get < limit))
+                                        {
+                                            write(src, put, Assertion.SPACE_END, State.PLACE2, Error.BYTES_DISTORTION);
+                                            return count;
+                                        }
+                                    dec_bits |= (((dec_byte = src[get++]) & 1) << 6 | 0x3F) << dec_shift;
+                                    if((dec_shift += 7) < 8) continue;
+                                    dec_shift -= 8;
+                                    set(src, put++);
+                                }
+                                dec_bits |= (dec_byte >> 1) << dec_shift;
+                                if((dec_shift += 7) < 8) continue;
+                                dec_shift -= 8;
                             }
-
-                            dec_bits |= (dec_byte >> 1) << dec_shift;
-                            if ((dec_shift += 7) < 8) continue;
-                            dec_shift -= 8;
-                        }
-                        else if (dec_byte == 0xFF) //mark
-                        {
-                            dec_bits  = 0;
-                            dec_shift = 0;
-                            if (put + dec_bytes < dst.id_bytes)
+                            else if(dec_byte == 0xFF)  //mark
                             {
+                                dec_bits  = 0;
+                                dec_shift = 0;
+                                if(put + dec_bytes < dst.id_bytes)
+                                {
+                                    dec_bytes = 0;
+                                    error_handler.error(Error.TOO_SHORT_PACK);
+                                    continue; //maybe bytes lost
+                                }
                                 dec_bytes = 0;
-                                error_handler.error(Error.TOO_SHORT_PACK);
-                                continue; //maybe bytes lost
+                                if((src[put - 2] << 8 | src[put - 1]) == dec_fix_crc[put - 3 & 3])  //last two bytes is checksum. check it
+                                {
+                                    write(src, put - 2, Assertion.PACK_END, State.NORMAL, Error.BYTES_DISTORTION);
+                                    put = 0;
+                                }
+                                else //bad CRC
+                                {
+                                    error_handler.error(Error.CRC_ERROR);
+                                    dst.Write(null, 0, 0);
+                                }
+                                dec_state = State.NORMAL;
+                                continue;
                             }
-
-                            dec_bytes = 0;
-                            if ((src[put - 2] << 8 | src[put - 1]) == dec_fix_crc[put - 3 & 3]) //last two bytes is checksum. check it
-                            {
-                                write(src, put - 2, Assertion.PACK_END, State.NORMAL, Error.BYTES_DISTORTION);
-                                put = 0;
-                            }
-                            else //bad CRC
-                            {
-                                error_handler.error(Error.CRC_ERROR);
-                                dst.Write(null, 0, 0);
-                            }
-
-                            dec_state = State.NORMAL;
-                            continue;
+                            else dec_bits |= dec_byte << dec_shift;
+                            set(src, put++);
                         }
-                        else dec_bits |= dec_byte << dec_shift;
-
-                        set(src, put++);
-                    }
-
                     write(src, put, Assertion.SPACE_END, State.NORMAL, Error.BYTES_DISTORTION);
                     return count;
                 }
@@ -322,14 +308,13 @@ namespace org.unirail
                     dec_bytes     += limit; //fix the number of bytes already processed
                     dst.assertion =  assertion;
                     dst.Write(src, 0, limit);
-                    if (dst.assertion != assertion)
+                    if(dst.assertion != assertion)
                     {
                         error_handler.error(error);
                         dst.Write(null, 0, 0);
                         dec_state = State.SEEK_FF_SYNC;
                     }
                     else dec_state = state_if_ok;
-
                     dst.assertion = Assertion.UNEXPECT; //return to normal state
                 }
 
@@ -337,7 +322,7 @@ namespace org.unirail
                 private void set(byte[] dst, int put)
                 {
                     dec_fix_crc[put & 3] =   dec_crc = crc16((byte)dec_bits, dec_crc);
-                    dst[put]             =   (byte)dec_bits;
+                    dst[put]             = (byte)dec_bits;
                     dec_bits             >>= 8;
                 }
 
@@ -355,7 +340,7 @@ namespace org.unirail
                     {
                         public void error(Error error)
                         {
-                            switch (error)
+                            switch(error)
                             {
                                 case Error.TOO_SHORT_PACK:
                                     Console.Error.Write("====================TOO_SHORT_PACK");
@@ -415,22 +400,21 @@ namespace org.unirail
                 public Slot(Slot? prev)
                 {
                     this.prev = prev;
-                    if (prev != null) prev.next = this;
+                    if(prev != null) prev.next = this;
                 }
 
                 public override string ToString()
                 {
                     var s                    = this;
-                    while (s.prev != null) s = s.prev;
+                    while(s.prev != null) s = s.prev;
                     var str                  = "\n";
-                    for (var i = 0;; i++)
+                    for(var i = 0;; i++)
                     {
-                        for (var ii = i; 0 < ii; ii--) str += "\t";
+                        for(var ii = i; 0 < ii; ii--) str += "\t";
                         str += s.dst.GetType() + "\n";
-                        if (s == this) break;
+                        if(s == this) break;
                         s = s.next;
                     }
-
                     return str;
                 }
 
@@ -442,12 +426,11 @@ namespace org.unirail
 
             private void free_slot()
             {
-                if (slot!.context != null)
+                if(slot!.context != null)
                 {
                     ctx          = slot.context.prev;
                     slot.context = null;
                 }
-
                 slot = slot.prev;
             }
 #endregion
@@ -467,7 +450,7 @@ namespace org.unirail
                 public ContextExt(ContextExt? prev)
                 {
                     this.prev = prev;
-                    if (prev != null) prev.next = this;
+                    if(prev != null) prev.next = this;
                 }
             }
 
@@ -479,9 +462,9 @@ namespace org.unirail
             {
                 get
                 {
-                    if (slot!.context != null) return slot.context;
-                    if (ctx == null && !context_ref.TryGetTarget(out ctx)) context_ref = new WeakReference<ContextExt>(ctx = new ContextExt(null));
-                    else if (ctx.next == null) ctx                                     = ctx.next = new ContextExt(ctx);
+                    if(slot!.context != null) return slot.context;
+                    if(ctx == null && !context_ref.TryGetTarget(out ctx)) context_ref = new WeakReference<ContextExt>(ctx = new ContextExt(null));
+                    else if(ctx.next == null) ctx                                     = ctx.next = new ContextExt(ctx);
                     else ctx                                                           = ctx.next;
                     return slot.context = ctx;
                 }
@@ -528,13 +511,12 @@ namespace org.unirail
 
             public bool get_info(uint the_case)
             {
-                if (0 < remaining)
+                if(0 < remaining)
                 {
                     _                       = context;
                     slot!.context!.key_long = (ulong)buffer![BYTE++] << 32;
                     return true;
                 }
-
                 retry_at(the_case);
                 return false;
             }
@@ -543,22 +525,22 @@ namespace org.unirail
 
             public bool hasNullKey(uint key_val_case, uint end_case)
             {
-                if (hasNullKey()) return true;
+                if(hasNullKey()) return true;
                 state = index_max == 0
-                            ? end_case
-                            : key_val_case;
+                        ? end_case
+                        : key_val_case;
                 return false;
             }
 
             public bool hasNullKey(uint null_values_case, uint key_val_case, uint next_field_case)
             {
                 var has = hasNullKey();
-                if (has && nullKeyHasValue()) return true; //not jump. step to send value of key == null
+                if(has && nullKeyHasValue()) return true;  //not jump. step to send value of key == null
                 //if key == null does not exists or it's value == null
                 //no need to receive value,  so can calculate next jump
                 state = 0 < index_max                    ? null_values_case : //jump to send keys which value == null
                         0 < (index_max = key_get<int>()) ? key_val_case :     // jump to send KV
-                                                           next_field_case;   //jump out
+                        next_field_case;   //jump out
                 return has;
             }
 
@@ -574,16 +556,16 @@ namespace org.unirail
             }
 
             public int items_count => key_get<int>() + index_max + (hasNullKey()
-                                                                        ? 1
-                                                                        : 0);
+                    ? 1
+                    : 0);
 
 
             public bool no_null_values(uint key_val_case, uint end_case)
             {
-                if (0 < index_max) return false; //keys which value == null
+                if(0 < index_max) return false;  //keys which value == null
                 state = 0 < (index_max = key_get<int>())
-                            ? key_val_case
-                            : end_case;
+                        ? key_val_case
+                        : end_case;
                 return true;
             }
 
@@ -627,7 +609,7 @@ namespace org.unirail
             public bool find_exist(int index)
             {
                 var nulls = buffer[BYTE++];
-                if (nulls == 0) return false;
+                if(nulls == 0) return false;
                 slot!.index       = index + trailingZeros(nulls);
                 slot!.items_nulls = nulls;
                 return true;
@@ -636,7 +618,7 @@ namespace org.unirail
             public bool find_base_exist(int base_index)
             {
                 var nulls = buffer[BYTE++];
-                if (nulls == 0) return false;
+                if(nulls == 0) return false;
                 slot!.base_index = base_index + trailingZeros(nulls);
                 slot!.base_nulls = nulls;
                 return true;
@@ -647,21 +629,19 @@ namespace org.unirail
 
             public bool no_items_data(uint retry_at_case, uint no_items_case)
             {
-                for (uint nulls; BYTE < len;)
+                for(uint nulls; BYTE < len;)
                 {
-                    if ((nulls = buffer![BYTE++]) != 0)
+                    if((nulls = buffer![BYTE++]) != 0)
                     {
                         slot!.index += trailingZeros(slot!.items_nulls = nulls);
                         return false;
                     }
-
-                    if (slot!.index_max <= (slot!.index += 8))
+                    if(slot!.index_max <= (slot!.index += 8))
                     {
                         state = no_items_case;
                         return false;
                     }
                 }
-
                 retry_at(retry_at_case);
                 return true;
             }
@@ -680,12 +660,11 @@ namespace org.unirail
 
             public bool get_fields_nulls(uint this_case)
             {
-                if (BYTE < len)
+                if(BYTE < len)
                 {
                     slot!.fields_nulls = buffer![BYTE++];
                     return true;
                 }
-
                 slot!.state = this_case;
                 mode        = DONE;
                 return false;
@@ -698,13 +677,12 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool get_len(int bytes, uint next_case)
             {
-                if (remaining < bytes)
+                if(remaining < bytes)
                 {
                     retry_get4(bytes, next_case);
                     mode = LEN;
                     return false;
                 }
-
                 slot!.index_max = get4<int>(bytes);
                 slot.index      = 0;
                 return true;
@@ -714,13 +692,12 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool get_base_len(int bytes, uint next_case)
             {
-                if (remaining < bytes)
+                if(remaining < bytes)
                 {
                     retry_get4(bytes, next_case);
                     mode = BASE_LEN;
                     return false;
                 }
-
                 slot!.base_index_max = get4<int>(bytes);
                 slot.base_index      = 0;
                 return true;
@@ -732,14 +709,13 @@ namespace org.unirail
 
             bool not_get4()
             {
-                if (remaining < bytes_left)
+                if(remaining < bytes_left)
                 {
                     var r = remaining;
                     u4         =  u4 << r * 8 | get4<uint>(r);
                     bytes_left -= r;
                     return true;
                 }
-
                 u4 = u4 << bytes_left * 8 | get4<uint>(bytes_left);
                 return false;
             }
@@ -767,11 +743,11 @@ namespace org.unirail
 
             public void Write(byte[]? src, int src_byte, int src_bytes)
             {
-                if (src == null)
+                if(src == null)
                 {
                     buffer    = null;
                     assertion = Assertion.UNEXPECT;
-                    if (slot == null) return;
+                    if(slot == null) return;
                     mode       = OK;
                     bytes_left = id_bytes;
                     u4         = 0;
@@ -779,103 +755,95 @@ namespace org.unirail
                     str        = null;
                     slot.dst   = null;
                     slot.state = 0;
-                    while (slot != null)
+                    while(slot != null)
                     {
                         slot.dst = null;
                         free_slot();
                     }
-
                     return;
                 }
-
-                if ((len = src_bytes) < 1)
-                    if (assertion == Assertion.PACK_END) //PACK_END unexpected.
+                if((len = src_bytes) < 1)
+                    if(assertion == Assertion.PACK_END)  //PACK_END unexpected.
                     {
                         assertion = Assertion.UNEXPECT;
                         return;
                     }
-
                 buffer = src;
                 BYTE   = src_byte;
-                for (; BYTE < len;)
+                for(; BYTE < len;)
                 {
-                    if (slot?.dst == null)
+                    if(slot?.dst == null)
                     {
-                        if (not_get4()) //read id
+                        if(not_get4())  //read id
                         {
-                            if (slot != null) free_slot(); //remove hardlinks
+                            if(slot != null) free_slot();  //remove hardlinks
                             break;
                         }
-
                         var id = u4;
                         bytes_left = id_bytes;
                         u4         = 0;
-                        if (slot == null && !slot_ref.TryGetTarget(out slot)) slot_ref = new WeakReference<Slot>(slot = new Slot(null));
-                        if ((slot.dst = int_dst!.Receiving(this, (int)id)) == null)
+                        if(slot == null && !slot_ref.TryGetTarget(out slot)) slot_ref = new WeakReference<Slot>(slot = new Slot(null));
+                        if((slot.dst = int_dst!.Receiving(this, (int)id)) == null)
                         {
                             slot = null;
                             break;
                         }
-
                         u8         = 0;
                         slot.state = 0;
                     }
                     else // internal write
-                        switch (mode)
+                        switch(mode)
                         {
                             case VAL8:
-                                if (remaining < bytes_left)
+                                if(remaining < bytes_left)
                                 {
                                     var r = remaining;
                                     u8         =  u8 << r * 8 | get8<ulong>(r);
                                     bytes_left -= r;
                                     goto exit;
                                 }
-
                                 u8 = u8 << bytes_left * 8 | get8<ulong>(bytes_left);
                                 break;
                             case VAL4:
-                                if (not_get4()) goto exit;
+                                if(not_get4()) goto exit;
                                 break;
                             case LEN:
-                                if (not_get4()) goto exit;
+                                if(not_get4()) goto exit;
                                 index_max = (int)u4;
                                 break;
                             case VARINT:
-                                if (BYTE < len && retry_get_varint(state)) break;
+                                if(BYTE < len && retry_get_varint(state)) break;
                                 goto exit;
                             case BASE_LEN:
-                                if (not_get4()) goto exit;
+                                if(not_get4()) goto exit;
                                 base_index_max = (int)u4;
                                 break;
                             case STR:
                                 var i = 0;
-                                for (;; i++)
-                                    if (BYTE + i == len)
+                                for(;; i++)
+                                    if(BYTE + i == len)
                                     {
-                                        if (buff!.Length < bytes_left + i) //have to expand buff.
+                                        if(buff!.Length < bytes_left + i)  //have to expand buff.
                                         {
                                             var tmp = buff;
                                             buff = ArrayPool<byte>.Shared.Rent(bytes_left + i + i / 2);
                                             Buffer.BlockCopy(tmp, 0, buff, 0, bytes_left);
                                             ArrayPool<byte>.Shared.Return(tmp);
                                         }
-
                                         Buffer.BlockCopy(buffer!, BYTE, buff, bytes_left, i);
                                         bytes_left += i;
                                         goto exit;
                                     }
-                                    else if (buffer![BYTE + i] == 0xFF) break;
-
-                                if (buff!.Length < bytes_left + i) //not enough space in buff
+                                    else if(buffer![BYTE + i] == 0xFF) break;
+                                if(buff!.Length < bytes_left + i)  //not enough space in buff
                                 {
                                     //comment on  check start
-                                    if (bytes_left <= BYTE) //there is enough space at the beginning, just use it
+                                    if(bytes_left <= BYTE)  //there is enough space at the beginning, just use it
                                     {
                                         Buffer.BlockCopy(buff, 0, buffer, BYTE - bytes_left, bytes_left);
                                         str = Encoding.UTF8.GetString(new Span<byte>(buffer, BYTE - bytes_left, bytes_left + i));
                                     }
-                                    else if (bytes_left + remaining <= buffer.Length)
+                                    else if(bytes_left + remaining <= buffer.Length)
                                     {
                                         Buffer.BlockCopy(buffer, BYTE, buffer, bytes_left, remaining);
                                         len += bytes_left - BYTE;
@@ -897,20 +865,18 @@ namespace org.unirail
                                     Buffer.BlockCopy(buffer, BYTE, buff, bytes_left, i);
                                     str = Encoding.UTF8.GetString(new Span<byte>(buff, 0, bytes_left + i));
                                 }
-
                                 BYTE       += i + 1;
                                 bytes_left =  0;
                                 ArrayPool<byte>.Shared.Return(buff);
                                 buff = null;
                                 break;
                         }
-
                     mode = OK;
-                    for (AdHoc.INT.BytesDst? dst;;)
-                        if ((dst = slot!.dst!.put_bytes(this)) == null)
+                    for(AdHoc.INT.BytesDst? dst;;)
+                        if((dst = slot!.dst!.put_bytes(this)) == null)
                         {
-                            if (mode      < OK) goto exit; //no more data
-                            if (slot.prev == null) break;  //it was the root level everything, all the data is received. further dispatching
+                            if(mode      < OK) goto exit;  //no more data
+                            if(slot.prev == null) break;   //it was the root level everything, all the data is received. further dispatching
                             // slot.dst = null;  //return from the depths we do not clean it will be possible to use
                             free_slot();
                         }
@@ -920,11 +886,10 @@ namespace org.unirail
                             slot.dst   = dst;
                             slot.state = 0;
                         }
-
                     bytes_left = id_bytes; // !!!!!!!!!!!!!
                     u4         = 0;
                     slot.state = 0;
-                    switch (assertion)
+                    switch(assertion)
                     {
                         case Assertion.SPACE_END: //unexpected. discard data.
                             assertion = Assertion.UNEXPECT;
@@ -934,14 +899,12 @@ namespace org.unirail
                             slot.dst = null;                   //preparing to read next packet data
                             return;
                     }
-
                     int_dst!.Received(this, slot.dst); //dispatching
                     slot.dst = null;                   //preparing to read next packet data
                 }
-
                 exit:
                 buffer = null;
-                if (assertion == Assertion.PACK_END) //PACK_END unexpected.
+                if(assertion == Assertion.PACK_END)  //PACK_END unexpected.
                     assertion = Assertion.UNEXPECT;
             }
 
@@ -955,7 +918,7 @@ namespace org.unirail
 
             public bool no_index(uint on_fail_case, int on_fail_fix_index)
             {
-                if (BYTE < len) return false;
+                if(BYTE < len) return false;
                 retry_at(on_fail_case);
                 index = on_fail_fix_index;
                 return true;
@@ -963,7 +926,7 @@ namespace org.unirail
 
             public bool no_base_index(uint on_fail_case, int on_fail_fix_base_index)
             {
-                if (BYTE < len) return false;
+                if(BYTE < len) return false;
                 retry_at(on_fail_case);
                 base_index = on_fail_fix_base_index;
                 return true;
@@ -975,7 +938,7 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool try_get8(int bytes, uint get8_case)
             {
-                if (remaining < bytes) return retry_get8(bytes, get8_case);
+                if(remaining < bytes) return retry_get8(bytes, get8_case);
                 u8 = get8<ulong>(bytes);
                 return true;
             }
@@ -998,34 +961,33 @@ namespace org.unirail
             {
                 ulong u8 = 0;
                 BYTE += byTes;
-                switch (byTes)
+                switch(byTes)
                 {
                     case 8:
                         u8 |= (ulong)buffer![BYTE - 8] << 56;
-                        goto case 7;
+                    goto case 7;
                     case 7:
                         u8 |= (ulong)buffer![BYTE - 7] << 48;
-                        goto case 6;
+                    goto case 6;
                     case 6:
                         u8 |= (ulong)buffer![BYTE - 6] << 40;
-                        goto case 5;
+                    goto case 5;
                     case 5:
                         u8 |= (ulong)buffer![BYTE - 5] << 32;
-                        goto case 4;
+                    goto case 4;
                     case 4:
                         u8 |= (ulong)buffer![BYTE - 4] << 24;
-                        goto case 3;
+                    goto case 3;
                     case 3:
                         u8 |= (ulong)buffer![BYTE - 3] << 16;
-                        goto case 2;
+                    goto case 2;
                     case 2:
                         u8 |= (ulong)buffer![BYTE - 2] << 8;
-                        goto case 1;
+                    goto case 1;
                     case 1:
                         u8 |= buffer![BYTE - 1];
                         break;
                 }
-
                 return Unsafe.As<ulong, T>(ref u8);
             }
 
@@ -1034,7 +996,7 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool try_get4(int bytes, uint next_case)
             {
-                if (remaining < bytes) return retry_get4(bytes, next_case);
+                if(remaining < bytes) return retry_get4(bytes, next_case);
                 u4 = get4<uint>(bytes);
                 return true;
             }
@@ -1058,22 +1020,21 @@ namespace org.unirail
             {
                 uint u4 = 0;
                 BYTE += byTes;
-                switch (byTes)
+                switch(byTes)
                 {
                     case 4:
                         u4 |= (uint)buffer![BYTE - 4] << 24;
-                        goto case 3;
+                    goto case 3;
                     case 3:
                         u4 |= (uint)buffer![BYTE - 3] << 16;
-                        goto case 2;
+                    goto case 2;
                     case 2:
                         u4 |= (uint)buffer![BYTE - 2] << 8;
-                        goto case 1;
+                    goto case 1;
                     case 1:
                         u4 |= buffer![BYTE - 1];
                         break;
                 }
-
                 return Unsafe.As<uint, T>(ref u4);
             }
 
@@ -1090,18 +1051,18 @@ namespace org.unirail
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool? get_bool() => u4 switch
-                                       {
-                                           0 => null,
-                                           1 => true,
-                                           _ => false
-                                       };
+        {
+                0 => null,
+                1 => true,
+                _ => false
+        };
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T get_bits<T>() => Unsafe.As<uint, T>(ref u4);
+        [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public T get_bits<T>() => Unsafe.As<uint, T>(ref u4);
 
             public T get_bits<T>(int len_bits)
             {
                 uint ret;
-                if (bit + len_bits < 9)
+                if(bit + len_bits < 9)
                 {
                     ret =  bits >> bit & 0xFFU >> 8 - len_bits;
                     bit += len_bits;
@@ -1111,19 +1072,18 @@ namespace org.unirail
                     ret = (bits >> bit | (bits = buffer![BYTE++]) << 8 - bit) & 0xFFU >> 8 - len_bits;
                     bit = bit + len_bits - 8;
                 }
-
                 return Unsafe.As<uint, T>(ref ret);
             }
 
 
             public bool try_get_bits(int len_bits, uint this_case)
             {
-                if (bit + len_bits < 9)
+                if(bit + len_bits < 9)
                 {
                     u4  =  bits >> bit & 0xFFU >> 8 - len_bits;
                     bit += len_bits;
                 }
-                else if (BYTE < len)
+                else if(BYTE < len)
                 {
                     u4  = (bits >> bit | (bits = buffer![BYTE++]) << (8 - bit)) & 0xFFU >> 8 - len_bits;
                     bit = bit + len_bits - 8;
@@ -1133,7 +1093,6 @@ namespace org.unirail
                     retry_at(this_case);
                     return false;
                 }
-
                 return true;
             }
 #endregion
@@ -1151,20 +1110,18 @@ namespace org.unirail
 
             private bool retry_get_varint(uint next_case)
             {
-                while (BYTE < len)
+                while(BYTE < len)
                 {
                     ulong b = buffer![BYTE++];
-                    if (0x7F < b)
+                    if(0x7F < b)
                     {
                         u8         |= (b & 0x7FUL) << bytes_left;
                         bytes_left += 7;
                         continue;
                     }
-
                     u8 |= b << bytes_left;
                     return true;
                 }
-
                 state = next_case;
                 mode  = VARINT;
                 return false;
@@ -1192,38 +1149,37 @@ namespace org.unirail
             public int get(int pos, int bytes)
             {
                 var u4 = 0;
-                switch (bytes)
+                switch(bytes)
                 {
                     case 4:
                         u4 |= buff![pos + 3] << 24;
-                        goto case 3;
+                    goto case 3;
                     case 3:
                         u4 |= buff![pos + 2] << 16;
-                        goto case 2;
+                    goto case 2;
                     case 2:
                         u4 |= buff![pos + 1] << 8;
-                        goto case 1;
+                    goto case 1;
                     case 1:
                         u4 |= buff![pos];
                         return u4;
                 }
-
                 return u4;
             }
 
             public void put(int pos, int bytes)
             {
-                switch (bytes)
+                switch(bytes)
                 {
                     case 4:
                         buff![pos + 3] = (byte)(u4 >> 24);
-                        goto case 3;
+                    goto case 3;
                     case 3:
                         buff![pos + 2] = (byte)(u4 >> 16);
-                        goto case 2;
+                    goto case 2;
                     case 2:
                         buff![pos + 1] = (byte)(u4 >> 8);
-                        goto case 1;
+                    goto case 1;
                     case 1:
                         buff![pos] = (byte)(u4 & 0xFF);
                         break;
@@ -1234,14 +1190,13 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool get_string(int get_string_case)
             {
-                for (var i = 0; BYTE + i < len; i++)
-                    if (buffer![BYTE + i] == 0xFF)
+                for(var i = 0; BYTE + i < len; i++)
+                    if(buffer![BYTE + i] == 0xFF)
                     {
                         str  =  Encoding.UTF8.GetString(new Span<byte>(buffer, BYTE, i));
                         BYTE += i + 1;
                         return true;
                     }
-
                 bytes_left = remaining; // in bytes_left - how many bytes in buff
                 buff       = ArrayPool<byte>.Shared.Rent(bytes_left + bytes_left / 2);
                 Buffer.BlockCopy(buffer!, BYTE, buff, 0, bytes_left);
@@ -1272,7 +1227,7 @@ namespace org.unirail
 
                 public int Read(byte[]? dst, int dst_byte, int dst_bytes)
                 {
-                    if (dst == null)
+                    if(dst == null)
                     {
                         src.Read(dst, 0, 0);
                         enc_bits  = 0;
@@ -1280,64 +1235,59 @@ namespace org.unirail
                         enc_crc   = 0;
                         return -1;
                     }
-
                     var fix_p = dst_byte;
                     var limit = dst_byte + dst_bytes;
-                    while (12 < limit - dst_byte)
+                    while(12 < limit - dst_byte)
                     {
                         var s = dst_byte + (limit - dst_byte) / 8 + 3;
                         src.assertion = Assertion.SPACE_END; //expect by default
                         var r   = src.Read(dst, s, limit - s);
                         var max = s + r;
-                        if (src.assertion == Assertion.UNEXPECT || s == max) break;
-                        for (; s < max; s++) dst_byte = encode(dst[s], dst, dst_byte);
-                        if (src.assertion == Assertion.PACK_END)
+                        if(src.assertion == Assertion.UNEXPECT || s == max) break;
+                        for(; s < max; s++) dst_byte = encode(dst[s], dst, dst_byte);
+                        if(src.assertion == Assertion.PACK_END)
                         {
                             int crc = enc_crc;
                             dst_byte = encode(crc >> 8 & 0xFF, dst, dst_byte);
                             dst_byte = encode(crc      & 0xFF, dst, dst_byte);
-                            if (0 < enc_shift) dst[dst_byte++] = (byte)enc_bits;
+                            if(0 < enc_shift) dst[dst_byte++] = (byte)enc_bits;
                             enc_bits        = 0;
                             enc_shift       = 0;
                             enc_crc         = 0;
                             dst[dst_byte++] = 0xFF;
                         }
                     }
-
                     src.assertion = Assertion.UNEXPECT; //return to normal state
                     return 0 < dst_byte - fix_p
-                               ? dst_byte - fix_p
-                               : -1;
+                           ? dst_byte - fix_p
+                           : -1;
                 }
 
                 private int encode(int src, byte[] dst, int dst_byte)
                 {
                     enc_crc = crc16((byte)src, enc_crc);
                     var v = (enc_bits |= src << enc_shift) & 0xFF;
-                    if ((v & 0x7F) == 0x7F)
+                    if((v & 0x7F) == 0x7F)
                     {
                         dst[dst_byte++] =   0x7F;
                         enc_bits        >>= 7;
-                        if (enc_shift < 7) enc_shift++;
+                        if(enc_shift < 7) enc_shift++;
                         else //                          a full byte in enc_bits
                         {
-                            if ((enc_bits & 0x7F) == 0x7F)
+                            if((enc_bits & 0x7F) == 0x7F)
                             {
                                 dst[dst_byte++] =   0x7F;
                                 enc_bits        >>= 7;
                                 enc_shift       =   1;
                                 return dst_byte;
                             }
-
                             dst[dst_byte++] = (byte)enc_bits;
                             enc_shift       = 0;
                             enc_bits        = 0;
                         }
-
                         return dst_byte;
                     }
-
-                    dst[dst_byte++] =   (byte)v;
+                    dst[dst_byte++] = (byte)v;
                     enc_bits        >>= 8;
                     return dst_byte;
                 }
@@ -1369,7 +1319,7 @@ namespace org.unirail
                 public Slot(Slot? prev)
                 {
                     this.prev = prev;
-                    if (prev != null) prev.next = this;
+                    if(prev != null) prev.next = this;
                 }
 
                 internal AdHoc.INT.BytesSrc? src;
@@ -1384,12 +1334,11 @@ namespace org.unirail
 
             private void free_slot()
             {
-                if (slot!.context != null)
+                if(slot!.context != null)
                 {
                     ctx          = slot.context.prev;
                     slot.context = null;
                 }
-
                 slot = slot.prev;
             }
 #endregion
@@ -1403,7 +1352,7 @@ namespace org.unirail
                 public ContextExt(ContextExt? prev)
                 {
                     this.prev = prev;
-                    if (prev != null) prev.next = this;
+                    if(prev != null) prev.next = this;
                 }
             }
 
@@ -1415,9 +1364,9 @@ namespace org.unirail
             {
                 get
                 {
-                    if (slot!.context != null) return slot.context;
-                    if (ctx == null && !context_ref.TryGetTarget(out ctx)) context_ref = new WeakReference<ContextExt>(ctx = new ContextExt(null));
-                    else if (ctx.next == null) ctx                                     = ctx.next = new ContextExt(ctx);
+                    if(slot!.context != null) return slot.context;
+                    if(ctx == null && !context_ref.TryGetTarget(out ctx)) context_ref = new WeakReference<ContextExt>(ctx = new ContextExt(null));
+                    else if(ctx.next == null) ctx                                     = ctx.next = new ContextExt(ctx);
                     else ctx                                                           = ctx.next;
                     return slot.context = ctx;
                 }
@@ -1465,14 +1414,14 @@ namespace org.unirail
             {
                 ++slot.index;
                 state = (uint)(slot.index_max == slot.index
-                                   ? next_state + 1
-                                   : next_state);
+                               ? next_state + 1
+                               : next_state);
                 return slot.index - 1;
             }
 
             public bool init_fields_nulls(int field0_bit, uint current_case)
             {
-                if (!allocate(1, current_case)) return false;
+                if(!allocate(1, current_case)) return false;
                 slot!.fields_nulls = field0_bit;
                 return true;
             }
@@ -1490,83 +1439,79 @@ namespace org.unirail
             // if dst == null - clean / reset state
             public int Read(byte[]? dst, int dst_byte, int dst_bytes)
             {
-                if (dst == null)
+                if(dst == null)
                 {
-                    if (slot == null) return -1;
+                    if(slot == null) return -1;
                     buffer    = null;
                     assertion = Assertion.UNEXPECT;
-                    while (slot != null)
+                    while(slot != null)
                     {
                         slot.src = null;
                         free_slot();
                     }
-
                     mode       = OK;
                     u4         = 0;
                     bytes_left = 0; //requires correct bitwise sending
                     return -1;
                 }
-
                 buffer = dst;
                 BYTE   = dst_byte;
                 len    = dst_bytes;
                 var fix = BYTE;
-                for (; BYTE < len;)
+                for(; BYTE < len;)
                 {
-                    if (slot?.src == null)
+                    if(slot?.src == null)
                     {
-                        if (slot == null && !slot_ref.TryGetTarget(out slot)) slot_ref = new WeakReference<Slot>(slot = new Slot(null));
-                        if ((slot!.src = int_src!.Sending(this)) == null)
+                        if(slot == null && !slot_ref.TryGetTarget(out slot)) slot_ref = new WeakReference<Slot>(slot = new Slot(null));
+                        if((slot!.src = int_src!.Sending(this)) == null)
                         {
                             buffer = null;
                             free_slot(); //remove hardlink
                             assertion = Assertion.UNEXPECT;
                             return 0 < BYTE - fix
-                                       ? BYTE - fix
-                                       : -1;
+                                   ? BYTE - fix
+                                   : -1;
                         }
-
                         slot.state = 0; //write id request
                         bytes_left = 0;
                         slot.index = 0;
                     }
                     else
-                        switch (mode) //the packet transmission was interrupted, recall where we stopped
+                        switch(mode)  //the packet transmission was interrupted, recall where we stopped
                         {
                             case STR:
-                                if (!encode(str!)) goto exit;
+                                if(!encode(str!)) goto exit;
                                 str = null;
                                 break;
                             case VAL4:
-                                if (len - BYTE < bytes_left) goto exit;
+                                if(len - BYTE < bytes_left) goto exit;
                                 put_val(u4, bytes_left);
                                 break;
                             case VAL8:
-                                if (len - BYTE < bytes_left) goto exit;
+                                if(len - BYTE < bytes_left) goto exit;
                                 put_val(u8, bytes_left);
                                 break;
                             case VARINTS:
-                                if (len - BYTE < 25) goto exit; //space for one full transaction
+                                if(len - BYTE < 25) goto exit;  //space for one full transaction
                                 bits_byte = BYTE;               //preserve space for bits info
                                 BYTE++;
                                 put_val(u8, bytes_left);
                                 break;
                             case VARINT:
-                                if (BYTE < len && put_varint(u8, state)) break;
+                                if(BYTE < len && put_varint(u8, state)) break;
                                 goto exit;
                             case BITS:
-                                if (len - BYTE < 4) return 0;
+                                if(len - BYTE < 4) return 0;
                                 bits_byte = BYTE; //preserve space for bits info
                                 BYTE++;
                                 break;
                         }
-
                     mode = OK;                                          //restore the state
-                    for (INT.BytesSrc? src;;)                           
-                        if ((src = slot!.src!.get_bytes(this)) == null) //not going deeper in the hierarchy
+                    for(INT.BytesSrc? src;;)
+                        if((src = slot!.src!.get_bytes(this)) == null)  //not going deeper in the hierarchy
                         {
-                            if (mode       < OK) goto exit; //there is not enough space in the provided buffer for further work
-                            if (slot!.prev == null) break;  //it was the root level all packet data sent
+                            if(mode       < OK) goto exit;  //there is not enough space in the provided buffer for further work
+                            if(slot!.prev == null) break;   //it was the root level all packet data sent
                             //slot.src = null               // do not do this. sometime can be used
                             free_slot();                    //return to the prev level and continue processing it
                         }
@@ -1576,15 +1521,13 @@ namespace org.unirail
                             slot!.src   = src;
                             slot!.state = 1; //skip write id
                         }
-
                     int_src!.Sent(this, slot.src);
-                    slot.src = null; //sing of next packet data request 
-                    if (assertion == Assertion.UNEXPECT) continue;
+                    slot.src = null; //sing of next packet data request
+                    if(assertion == Assertion.UNEXPECT) continue;
                     slot      = null;
                     assertion = Assertion.PACK_END;
                     break;
                 }
-
                 exit:
                 buffer = null;
                 return BYTE - fix;
@@ -1592,7 +1535,7 @@ namespace org.unirail
 
             public bool allocate(int bytes, uint current_case)
             {
-                if (bytes <= remaining) return true;
+                if(bytes <= remaining) return true;
                 slot!.state = current_case;
                 mode        = DONE;
                 return false;
@@ -1600,15 +1543,15 @@ namespace org.unirail
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(bool src) => put_bits(src
-                                                      ? 1
-                                                      : 0, 1);
+                                                  ? 1
+                                                  : 0, 1);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(bool? src) => put_bits(src.HasValue
-                                                       ? src.Value
-                                                             ? 3
-                                                             : 2
-                                                       : 0, 2);
+                                                   ? src.Value
+                                                   ? 3
+                                                   : 2
+                                                   : 0, 2);
 
 
 #region bits
@@ -1616,7 +1559,7 @@ namespace org.unirail
 
             public bool allocate(uint current_case) //space request (20 bytes) for at least one transaction is called once on the first varint, as continue of `init_bits`
             {
-                if (17 < remaining) return true;
+                if(17 < remaining) return true;
                 slot!.state = current_case;
                 BYTE        = bits_byte; //trim byte at bits_byte index
                 mode        = BITS;
@@ -1629,13 +1572,12 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool init_bits(int space_bytes, uint current_case)
             {
-                if (len - BYTE < space_bytes)
+                if(len - BYTE < space_bytes)
                 {
                     slot.state = current_case;
                     mode       = DONE;
                     return false;
                 }
-
                 bits      = 0;
                 bit       = 0;
                 bits_byte = BYTE++; //allocate space
@@ -1648,8 +1590,8 @@ namespace org.unirail
             public bool put_bits(int src, int len_bits)
             {
                 bits |= (uint)src << bit;
-                if ((bit += len_bits) < 9) return false; //yes 9! not 8!  to avoid allocating the next byte after the current one is full. it is might be redundant
-                buffer![bits_byte] =   (byte)bits;
+                if((bit += len_bits) < 9) return false;  //yes 9! not 8!  to avoid allocating the next byte after the current one is full. it is might be redundant
+                buffer![bits_byte] = (byte)bits;
                 bits               >>= 8;
                 bit                -=  8;
                 bits_byte          =   BYTE++;
@@ -1660,7 +1602,7 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void end_bits()
             {
-                if (0 < bit) buffer![bits_byte] = (byte)bits;
+                if(0 < bit) buffer![bits_byte] = (byte)bits;
                 else BYTE                       = bits_byte; //trim byte at bits_byte index. allocated, but not used
             }
 
@@ -1676,7 +1618,7 @@ namespace org.unirail
             private bool put_varint(int bytes_info, int bits, ulong varint, int bytes, uint continue_at_case)
             {
                 //            break here is OK
-                if (put_bits(bytes_info, bits) && remaining < 25) //wost case 83: 3 bits x 3times x 8 bytes
+                if(put_bits(bytes_info, bits) && remaining < 25)  //wost case 83: 3 bits x 3times x 8 bytes
                 {
                     u8         = varint; //fix value
                     bytes_left = bytes;  //fix none zero LSB length
@@ -1685,14 +1627,13 @@ namespace org.unirail
                     mode       = VARINTS;
                     return false;
                 }
-
                 put_val(varint, bytes);
                 return true;
             }
 
             public bool put_varint(int bits, uint continue_at_case)
             {
-                if (!put_bits(0, bits) || 20 < remaining) return true;
+                if(!put_bits(0, bits) || 20 < remaining) return true;
                 continue_bits_at(continue_at_case);
                 return false;
             }
@@ -1700,8 +1641,8 @@ namespace org.unirail
             private static int bytes1(ulong src)
             {
                 return src < 1 << 8
-                           ? 1
-                           : 2;
+                       ? 1
+                       : 2;
             }
 
             public bool put_varint21(ulong src, uint continue_at_case)
@@ -1722,14 +1663,14 @@ namespace org.unirail
 
             public bool put_varint32(ulong src, uint continue_at_case)
             {
-                if (src == 0) return put_varint(2, continue_at_case);
+                if(src == 0) return put_varint(2, continue_at_case);
                 var bytes = bytes2(src);
                 return put_varint(bytes, 2, src & 0xFFFFFFFFL, bytes, continue_at_case);
             }
 
             public bool put_varint321(ulong src, uint continue_at_case)
             {
-                if (src is 0) return put_varint(3, continue_at_case);
+                if(src is 0) return put_varint(3, continue_at_case);
                 var bytes = bytes2(src);
                 return put_varint(bytes << 1 | 1, 3, src & 0xFFFF_FFL, bytes, continue_at_case);
             }
@@ -1740,8 +1681,8 @@ namespace org.unirail
             private static int bytes3(ulong src)
             {
                 return src < 1L << 16 ? src < 1L << 8
-                                            ? 1
-                                            : 2 :
+                       ? 1
+                       : 2 :
                        src < 1L << 24 ? 3 : 4;
             }
 
@@ -1762,10 +1703,10 @@ namespace org.unirail
             private static int bytes4(ulong src)
             {
                 return src < 1 << 24 ? src < 1 << 16
-                                           ? src < 1 << 8
-                                                 ? 1
-                                                 : 2
-                                           : 3 :
+                       ? src < 1 << 8
+                       ? 1
+                       : 2
+                       : 3 :
                        src < 1L << 32 ? 4 :
                        src < 1L << 40 ? 5 :
                        src < 1L << 48 ? 6 : 7;
@@ -1773,14 +1714,14 @@ namespace org.unirail
 
             public bool put_varint73(ulong src, uint continue_at_case)
             {
-                if (src == 0) return put_varint(3, continue_at_case);
+                if(src == 0) return put_varint(3, continue_at_case);
                 var bytes = bytes4(src);
                 return put_varint(bytes, 3, src, bytes, continue_at_case);
             }
 
             public bool put_varint731(ulong src, uint continue_at_case)
             {
-                if (src is 0) return put_varint(4, continue_at_case);
+                if(src is 0) return put_varint(4, continue_at_case);
                 var bytes = bytes4(src);
                 return put_varint(bytes << 1 | 1, 4, src, bytes, continue_at_case);
             }
@@ -1788,12 +1729,12 @@ namespace org.unirail
             private static int bytes5(ulong src)
             {
                 return src < 1L << 32 ? src < 1 << 16 ? src < 1 << 8
-                                                            ? 1
-                                                            : 2 :
-                                        src < 1 << 24 ? 3 : 4 :
+                       ? 1
+                       : 2 :
+                       src < 1 << 24 ? 3 : 4 :
                        src < 1L << 48 ? src < 1L << 40
-                                            ? 5
-                                            : 6 :
+                       ? 5
+                       : 6 :
                        src < 1L << 56 ? 7 : 8;
             }
 
@@ -1812,32 +1753,30 @@ namespace org.unirail
 
             public bool put_varint84(ulong src, uint continue_at_case)
             {
-                if (src == 0) return put_varint(4, continue_at_case);
+                if(src == 0) return put_varint(4, continue_at_case);
                 var bytes = bytes5(src);
                 return put_varint(bytes, 4, src, bytes, continue_at_case);
             }
 
             public bool put_varint841(ulong src, uint continue_at_case)
             {
-                if (src is 0) return put_varint(5, continue_at_case);
+                if(src is 0) return put_varint(5, continue_at_case);
                 var bytes = bytes5(src);
                 return put_varint(bytes << 1 | 1, 5, src, bytes, continue_at_case);
             }
 
             public bool put_varint(ulong src, uint next_case)
             {
-                while (BYTE < len)
+                while(BYTE < len)
                 {
-                    if (src < 0x80)
+                    if(src < 0x80)
                     {
                         buffer![BYTE++] = (byte)src;
                         return true;
                     }
-
-                    buffer![BYTE++] =   (byte)(~0x7FUL | src & 0x7FUL);
+                    buffer![BYTE++] = (byte)(~0x7FUL | src & 0x7FUL);
                     src             >>= 7;
                 }
-
                 u8    = src;
                 state = next_case;
                 mode  = VARINT;
@@ -1847,12 +1786,11 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put_val(ulong src, int bytes, uint next_field_case)
             {
-                if (remaining < bytes)
+                if(remaining < bytes)
                 {
                     put(src, bytes, next_field_case);
                     return false;
                 }
-
                 put_val(src, bytes);
                 return true;
             }
@@ -1861,29 +1799,29 @@ namespace org.unirail
             public void put_val(ulong src, int bytes)
             {
                 BYTE += bytes;
-                switch (bytes)
+                switch(bytes)
                 {
                     case 8:
                         buffer![BYTE - 8] = (byte)(src >> 56);
-                        goto case 7;
+                    goto case 7;
                     case 7:
                         buffer![BYTE - 7] = (byte)(src >> 48);
-                        goto case 6;
+                    goto case 6;
                     case 6:
                         buffer![BYTE - 6] = (byte)(src >> 40);
-                        goto case 5;
+                    goto case 5;
                     case 5:
                         buffer![BYTE - 5] = (byte)(src >> 32);
-                        goto case 4;
+                    goto case 4;
                     case 4:
                         buffer![BYTE - 4] = (byte)(src >> 24);
-                        goto case 3;
+                    goto case 3;
                     case 3:
                         buffer![BYTE - 3] = (byte)(src >> 16);
-                        goto case 2;
+                    goto case 2;
                     case 2:
                         buffer![BYTE - 2] = (byte)(src >> 8);
-                        goto case 1;
+                    goto case 1;
                     case 1:
                         buffer![BYTE - 1] = (byte)src;
                         return;
@@ -1902,25 +1840,23 @@ namespace org.unirail
 
             public bool no_more_items(uint key_value_case, uint end_case)
             {
-                if (++slot.index < slot.index_max) return false;
-                if (0 < index2)
+                if(++slot.index < slot.index_max) return false;
+                if(0 < index2)
                 {
                     index_max = index2;
                     state     = key_value_case;
                 }
                 else state = end_case;
-
                 return true;
             }
 
             public bool no_more_items(uint end_case)
             {
-                if (0 < index2)
+                if(0 < index2)
                 {
                     index_max = index2;
                     return false;
                 }
-
                 state = end_case;
                 return true;
             }
@@ -1928,12 +1864,11 @@ namespace org.unirail
             //The method is split. cause of items == 0 no more queries!
             public bool zero_items(int items)
             {
-                if (items == 0)
+                if(items == 0)
                 {
                     put((byte)0);
                     return true;
                 }
-
                 index_max = items;
                 return false;
             }
@@ -1942,17 +1877,16 @@ namespace org.unirail
             {
                 var items         = index_max;
                 var null_key_bits = 0;
-                if (null_key_present)
+                if(null_key_present)
                 {
                     null_key_bits = 1 << 7;
-                    if (--items == 0)
+                    if(--items == 0)
                     {
                         put((byte)null_key_bits);
                         state = (uint)end_case;
                         return true;
                     }
                 }
-
                 index_max = items; //key-value items
                 var bytes = bytes4value(items);
                 put((byte)(null_key_bits | bytes));
@@ -1964,20 +1898,19 @@ namespace org.unirail
             {
                 var items = index_max;
                 var null_key_bits = null_key_has_value
-                                        ? 1 << 6
-                                        : 0;
-                if (null_key_present)
+                                    ? 1 << 6
+                                    : 0;
+                if(null_key_present)
                 {
                     null_key_bits |= 1 << 7;
-                    if (--items == 0)
+                    if(--items == 0)
                     {
                         put((byte)null_key_bits);
                         state = next_field_case;
                         return true;
                     }
                 }
-
-                if (0 < keys_null_value_count)
+                if(0 < keys_null_value_count)
                 {
                     index_max = keys_null_value_count; //keys with null value
                     var keys_null_value_count_bytes = bytes4value(keys_null_value_count);
@@ -1985,12 +1918,11 @@ namespace org.unirail
                     index2 =  items; //key-value items preserve
                     var key_val_count_bytes = bytes4value(items);
                     put((byte)(null_key_bits | keys_null_value_count_bytes << 3 | key_val_count_bytes));
-                    if (0 < items) put_val((uint)items, key_val_count_bytes, 0);
+                    if(0 < items) put_val((uint)items, key_val_count_bytes, 0);
                     put_val((uint)keys_null_value_count, keys_null_value_count_bytes, 0);
                     state = next_case;
                     return false;
                 }
-
                 state     = key_val_case;
                 index_max = items; //key-value items
                 var bytes = bytes4value(items);
@@ -2010,12 +1942,11 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put_val(uint src, int bytes, uint next_field_case)
             {
-                if (remaining < bytes)
+                if(remaining < bytes)
                 {
                     put(src, bytes, next_field_case);
                     return false;
                 }
-
                 put_val(src, bytes);
                 return true;
             }
@@ -2024,17 +1955,17 @@ namespace org.unirail
             public void put_val(uint src, int bytes)
             {
                 BYTE += bytes;
-                switch (bytes)
+                switch(bytes)
                 {
                     case 4:
                         buffer![BYTE - 4] = (byte)(src >> 24);
-                        goto case 3;
+                    goto case 3;
                     case 3:
                         buffer![BYTE - 3] = (byte)(src >> 16);
-                        goto case 2;
+                    goto case 2;
                     case 2:
                         buffer![BYTE - 2] = (byte)(src >> 8);
-                        goto case 1;
+                    goto case 1;
                     case 1:
                         buffer![BYTE - 1] = (byte)src;
                         return;
@@ -2045,7 +1976,7 @@ namespace org.unirail
             public bool put(string src, uint next_case)
             {
                 bytes_left = src.Length; //here, bytes_left - number of unsent chars from the end of the string
-                if (encode(src)) return true;
+                if(encode(src)) return true;
                 slot!.state = next_case;
                 str         = src; // switch to send internarly
                 mode        = STR;
@@ -2054,15 +1985,14 @@ namespace org.unirail
 
             bool encode(string str)
             {
-                while (0 < bytes_left) //here, bytes_left - number of unsent chars from the end of the string
+                while(0 < bytes_left)  //here, bytes_left - number of unsent chars from the end of the string
                 {
                     var chs = Math.Min(bytes_left, remaining / 4); //the number of characters that can be guaranteed to fit into  `remaining` space
-                    if (chs == 0) return false;                    //the provided buffer has run out of space
+                    if(chs == 0) return false;                     //the provided buffer has run out of space
                     BYTE       += Encoding.UTF8.GetBytes(str.AsSpan(str!.Length - bytes_left, chs), new Span<byte>(buffer, BYTE, remaining));
                     bytes_left -= chs;
                 }
-
-                if (BYTE == len) return false;
+                if(BYTE == len) return false;
                 buffer![BYTE++] = 0xFF; //sign - end of the string
                 return true;
             }
@@ -2094,11 +2024,11 @@ namespace org.unirail
 
 
             public int bytes4value(int value) => value < 0xFFFF ? value < 0xFF
-                                                                      ? value == 0
-                                                                            ? 0
-                                                                            : 1
-                                                                      : 2 :
-                                                 value < 0xFFFFFF ? 3 : 4;
+            ? value == 0
+            ? 0
+            : 1
+            : 2 :
+            value < 0xFFFFFF ? 3 : 4;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)] public void put(sbyte src) => buffer![BYTE++] = (byte)src;
 
@@ -2117,12 +2047,11 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(byte src, uint next_case)
             {
-                if (BYTE < len)
+                if(BYTE < len)
                 {
                     put(src);
                     return true;
                 }
-
                 put(src, 1, next_case);
                 return false;
             }
@@ -2136,12 +2065,11 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(ushort src, uint next_case)
             {
-                if (remaining < 2)
+                if(remaining < 2)
                 {
                     put(src, 2, next_case);
                     return false;
                 }
-
                 put(src);
                 return true;
             }
@@ -2156,8 +2084,8 @@ namespace org.unirail
             public void put(ushort src)
             {
                 BYTE              += 2;
-                buffer![BYTE - 2] =  (byte)(src >> 8);
-                buffer![BYTE - 1] =  (byte)src;
+                buffer![BYTE - 2] = (byte)(src >> 8);
+                buffer![BYTE - 1] = (byte)src;
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)] public bool put(int src, uint next_case) => put((uint)src, next_case);
@@ -2178,12 +2106,11 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(uint src, uint next_case)
             {
-                if (remaining < 4)
+                if(remaining < 4)
                 {
                     put(src, 4, next_case);
                     return false;
                 }
-
                 put(src);
                 return true;
             }
@@ -2208,10 +2135,10 @@ namespace org.unirail
             public void put(uint src)
             {
                 BYTE              += 4;
-                buffer![BYTE - 4] =  (byte)(src >> 24);
-                buffer![BYTE - 3] =  (byte)(src >> 16);
-                buffer![BYTE - 2] =  (byte)(src >> 8);
-                buffer![BYTE - 1] =  (byte)src;
+                buffer![BYTE - 4] = (byte)(src >> 24);
+                buffer![BYTE - 3] = (byte)(src >> 16);
+                buffer![BYTE - 2] = (byte)(src >> 8);
+                buffer![BYTE - 1] = (byte)src;
             }
 
 
@@ -2233,12 +2160,11 @@ namespace org.unirail
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(ulong src, uint next_case)
             {
-                if (remaining < 8)
+                if(remaining < 8)
                 {
                     put(src, 8, next_case);
                     return false;
                 }
-
                 put(src);
                 return true;
             }
@@ -2262,14 +2188,14 @@ namespace org.unirail
             public void put(ulong src)
             {
                 BYTE              += 8;
-                buffer![BYTE - 8] =  (byte)(src >> 56);
-                buffer![BYTE - 7] =  (byte)(src >> 48);
-                buffer![BYTE - 6] =  (byte)(src >> 40);
-                buffer![BYTE - 5] =  (byte)(src >> 32);
-                buffer![BYTE - 4] =  (byte)(src >> 24);
-                buffer![BYTE - 3] =  (byte)(src >> 16);
-                buffer![BYTE - 2] =  (byte)(src >> 8);
-                buffer![BYTE - 1] =  (byte)src;
+                buffer![BYTE - 8] = (byte)(src >> 56);
+                buffer![BYTE - 7] = (byte)(src >> 48);
+                buffer![BYTE - 6] = (byte)(src >> 40);
+                buffer![BYTE - 5] = (byte)(src >> 32);
+                buffer![BYTE - 4] = (byte)(src >> 24);
+                buffer![BYTE - 3] = (byte)(src >> 16);
+                buffer![BYTE - 2] = (byte)(src >> 8);
+                buffer![BYTE - 1] = (byte)src;
             }
 
             public void Close()  => Read(null, 0, 0);
@@ -2280,18 +2206,18 @@ namespace org.unirail
         {
             public Dictionary() { }
             public Dictionary(IDictionary<K, V>               dictionary) : base(dictionary) { }
-            public Dictionary(IDictionary<K, V>               dictionary, IEqualityComparer<K>? comparer) : base(dictionary, comparer) { }
+            public Dictionary(IDictionary<K, V>               dictionary, IEqualityComparer<K> ? comparer) : base(dictionary, comparer) { }
             public Dictionary(IEnumerable<KeyValuePair<K, V>> collection) : base(collection) { }
-            public Dictionary(IEnumerable<KeyValuePair<K, V>> collection, IEqualityComparer<K>? comparer) : base(collection, comparer) { }
-            public Dictionary(IEqualityComparer<K>?           comparer) : base(comparer) { }
+            public Dictionary(IEnumerable<KeyValuePair<K, V>> collection, IEqualityComparer<K> ? comparer) : base(collection, comparer) { }
+            public Dictionary(IEqualityComparer<K> ?           comparer) : base(comparer) { }
             public Dictionary(int                             capacity) : base(capacity) { }
-            public Dictionary(int                             capacity, IEqualityComparer<K>? comparer) : base(capacity, comparer) { }
+            public Dictionary(int                             capacity, IEqualityComparer<K> ? comparer) : base(capacity, comparer) { }
             protected Dictionary(SerializationInfo            info,     StreamingContext      context) : base(info, context) { }
 
 
             public int COUNT => Count + (hasNullKey
-                                             ? 1
-                                             : 0);
+                                         ? 1
+                                         : 0);
 
             public bool hasNullKey = false;
             public V    NullKeyValue;
@@ -2313,26 +2239,23 @@ namespace org.unirail
 
             public bool get_multithreaded(ref T value)
             {
-                while (Interlocked.CompareExchange(ref Lock, 1, 0) != 0) Thread.SpinWait(10);
-
+                while(Interlocked.CompareExchange(ref Lock, 1, 0) != 0) Thread.SpinWait(10);
                 var ret = get(ref value);
-
                 Lock = 0;
                 return ret;
             }
 
             public bool get(ref T value)
             {
-                if (_get == _put) return false;
+                if(_get == _put) return false;
                 value = buffer[(int)(_get++) & mask];
                 return true;
             }
 
             public bool put_multithreaded(T value)
             {
-                if (size + 1                                       == buffer.Length) return false;
-                while (Interlocked.CompareExchange(ref Lock, 1, 0) != 0) Thread.SpinWait(10);
-
+                if(size + 1                                       == buffer.Length) return false;
+                while(Interlocked.CompareExchange(ref Lock, 1, 0) != 0) Thread.SpinWait(10);
                 var ret = put(value);
                 Lock = 0;
                 return ret;
@@ -2340,10 +2263,8 @@ namespace org.unirail
 
             public bool put(T value)
             {
-                if (size + 1 == buffer.Length) return false;
-
+                if(size + 1 == buffer.Length) return false;
                 buffer[(int)(_put++) & mask] = value;
-
                 return true;
             }
 

@@ -34,7 +34,7 @@ namespace org.unirail.collections
 {
     public interface BitsNullList
     {
-        abstract class R : BitsList.R, IList<byte?>
+        abstract class R : BitsList.R, IList < byte? >
         {
             public virtual void Add(byte? item) { throw new NotImplementedException(); }
 
@@ -44,7 +44,7 @@ namespace org.unirail.collections
 
             public virtual bool Remove(byte? item) { throw new NotImplementedException(); }
 
-            public int IndexOf(byte? item) => item == null ? indexOf(null_val) : indexOf(item.Value);
+            public int IndexOf(byte ? item) => item == null ? indexOf(null_val) : indexOf(item.Value);
 
             public virtual void Insert(int index, byte? item) { throw new NotImplementedException(); }
 
@@ -62,7 +62,6 @@ namespace org.unirail.collections
             {
                 var index = (uint)BitsList.index((uint)(item *= bits));
                 var bit   = BitsList.bit((uint)item);
-
                 return BitsList.BITS < bit + bits ? BitsList.value(values[index], values[index + 1], bit, bits, mask) : BitsList.value(values[index], bit, mask);
             }
 
@@ -73,22 +72,21 @@ namespace org.unirail.collections
 
             protected R(int null_val, int bits_per_item, int count) : base(bits_per_item, count)
             {
-                if ((this.null_val = (byte)null_val) != 0) nulls(this, 0, count);
+                if((this.null_val = (byte)null_val) != 0) nulls(this, 0, count);
             }
 
             protected R(int null_val, int bits_per_item, int fill_value, int Count) : base(bits_per_item, Count)
             {
                 this.null_val = (byte)null_val;
                 this.Count    = Count;
-
-                if (fill_value == 0) return;
-                while (-1      < --Count) set(this, Count, fill_value);
+                if(fill_value == 0) return;
+                while(-1      < --Count) set(this, Count, fill_value);
             }
 
 
             protected static void nulls(R dst, int from, int upto)
             {
-                while (from < upto) set(dst, from++, dst.null_val);
+                while(from < upto) set(dst, from++, dst.null_val);
             }
 
             public bool hasValue(int index) { return this[index] != null_val; }
@@ -97,16 +95,16 @@ namespace org.unirail.collections
 
             IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
 
-            public IEnumerator<byte?> GetEnumerator() => new Enumerator(this);
+            public IEnumerator < byte? > GetEnumerator() => new Enumerator(this);
 
-            public struct Enumerator : IEnumerator<byte?>, IEnumerator
+            public struct Enumerator : IEnumerator < byte? >, IEnumerator
             {
-                private readonly IList<byte?> _list;
+                private readonly IList < byte? > _list;
                 private          int          _index;
 
                 private byte? _current;
 
-                internal Enumerator(IList<byte?> list)
+                internal Enumerator(IList < byte? > list)
                 {
                     _list    = list;
                     _index   = 0;
@@ -136,24 +134,19 @@ namespace org.unirail.collections
 
             StringBuilder ToString(StringBuilder? dst)
             {
-                if (dst == null) dst = new StringBuilder(Count * 4);
+                if(dst == null) dst = new StringBuilder(Count * 4);
                 else dst.EnsureCapacity(dst.Length + Count     * 4);
-
                 var src = values[(uint)0];
-                for (int bp = 0, max = Count * bits, i = 1; bp < max; bp += bits, i++)
+                for(int bp = 0, max = Count * bits, i = 1; bp < max; bp += bits, i++)
                 {
                     var  _bit   = BitsList.bit((uint)bp);
                     var index  = (uint)(BitsList.index((uint)bp) + 1);
                     var  _value = (long)(BitsList.BITS < _bit + bits ? BitsList.value(src, src = values[index], _bit, bits, mask) : BitsList.value(src, _bit, mask));
-
-                    if (_value == null_val) dst.Append("null");
+                    if(_value == null_val) dst.Append("null");
                     else dst.Append(_value);
-
                     dst.Append('\t');
-
-                    if (i % 10 == 0) dst.Append('\t').Append(i / 10 * 10).Append('\n');
+                    if(i % 10 == 0) dst.Append('\t').Append(i / 10 * 10).Append('\n');
                 }
-
                 return dst;
             }
         }
@@ -166,13 +159,12 @@ namespace org.unirail.collections
             public override bool Remove(byte? item)
             {
                 var i = IndexOf(item);
-                if (i < 0) return false;
+                if(i < 0) return false;
                 removeAt(i);
-
                 return true;
             }
 
-            public override void Insert(int index, byte? item) => add(item == null ? null_val : item.Value);
+            public override void Insert(int index, byte ? item) => add(item == null ? null_val : item.Value);
 
             public override void Clear() => clear();
 
@@ -185,7 +177,7 @@ namespace org.unirail.collections
 
             public RW(int null_val, int bits_per_item, int count) : base(null_val, bits_per_item, count) { }
 
-            public RW(int null_val, int bits_per_item, int? fill_value, int items) : base(null_val, bits_per_item, fill_value ?? null_val, items) { }
+            public RW(int null_val, int bits_per_item, int ? fill_value, int items) : base(null_val, bits_per_item, fill_value ?? null_val, items) { }
 
 
             public RW(int null_val, int bits_per_item, params byte[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
@@ -226,7 +218,7 @@ namespace org.unirail.collections
 
             public void add(int index, byte src)
             {
-                if (index < Count) add(this, index, src);
+                if(index < Count) add(this, index, src);
                 else set(index, src);
             }
 
@@ -244,96 +236,81 @@ namespace org.unirail.collections
             public void set(int item, params byte?[] values)
             {
                 var fix = Count;
-
-                for (var i = values.Length; -1 < --i;)
+                for(var i = values.Length; -1 < --i;)
                     set(this, item + i, values[i] ?? null_val);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params ushort?[] values)
             {
                 var fix = Count;
-
-                for (var i = values.Length; -1 < --i;)
+                for(var i = values.Length; -1 < --i;)
                     set(this, item + i, values[i] ?? null_val);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params short?[] values)
             {
                 var fix = Count;
-
-                for (var i = values.Length; -1 < --i;)
+                for(var i = values.Length; -1 < --i;)
                     set(this, item + i, values[i] ?? null_val);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params int?[] values)
             {
                 var fix = Count;
-
-                for (var i = values.Length; -1 < --i;)
+                for(var i = values.Length; -1 < --i;)
                     set(this, item + i, values[i] ?? null_val);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params long?[] values)
             {
                 var fix = Count;
-
-                for (var i = values.Length; -1 < --i;)
+                for(var i = values.Length; -1 < --i;)
                     set(this, item + i, values[i] ?? null_val);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params byte[] values)
             {
                 var fix = Count;
                 set(this, item, values);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params ushort[] values)
             {
                 var fix = Count;
                 set(this, item, values);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params short[] values)
             {
                 var fix = Count;
                 set(this, item, values);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params int[] values)
             {
                 var fix = Count;
                 set(this, item, values);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void set(int item, params long[] values)
             {
                 var fix = Count;
                 set(this, item, values);
-
-                if (fix < item && null_val != 0) nulls(this, fix, item);
+                if(fix < item && null_val != 0) nulls(this, fix, item);
             }
 
             public void clear()
             {
-                if (Count < 1) return;
+                if(Count < 1) return;
                 nulls(this, 0, Count);
                 Count = 0;
             }

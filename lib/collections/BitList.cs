@@ -81,25 +81,19 @@ namespace org.unirail.collections
 
             protected internal int used()
             {
-                if (-1 < _used) return _used;
-
+                if(-1 < _used) return _used;
                 _used &= OI;
-
                 var i = _used - 1;
-                while (-1 < i && array[i] == 0) i--;
-
+                while(-1 < i && array[i] == 0) i--;
                 return _used = i + 1;
             }
 
             protected internal int used(int bit)
             {
-                if (Count <= bit) Count = bit + 1;
-
+                if(Count <= bit) Count = bit + 1;
                 var index = bit >> LEN;
-                if (index < used()) return index;
-
-                if (array.Length < (_used = index + 1)) Array.Resize(ref array, Math.Max(2 * array.Length, _used));
-
+                if(index < used()) return index;
+                if(array.Length < (_used = index + 1)) Array.Resize(ref array, Math.Max(2 * array.Length, _used));
                 return index;
             }
 
@@ -119,21 +113,16 @@ namespace org.unirail.collections
             public int get(ulong[] dst, int from_bit, int to_bit)
             {
                 var ret = (to_bit - from_bit - 1 >> LEN) + 1;
-
                 var index = from_bit >> LEN;
-
-                if ((from_bit & MASK) == 0) Array.Copy(array, index, dst, 0, ret - 1);
+                if((from_bit & MASK) == 0) Array.Copy(array, index, dst, 0, ret - 1);
                 else
-                    for (var i = 0; i < ret - 1; i++, index++)
+                    for(var i = 0; i < ret - 1; i++, index++)
                         dst[i] = array[index] >> from_bit | array[index + 1] << -from_bit;
-
-
                 var mask = FFFFFFFFFFFFFFFF >> -to_bit;
                 dst[ret - 1] =
                     (to_bit - 1 & MASK) < (from_bit & MASK)
-                        ? array[index] >> from_bit | (array[index + 1] & mask) << -from_bit
-                        : (array[index] & mask) >> from_bit;
-
+                    ? array[index] >> from_bit | (array[index + 1] & mask) << -from_bit
+                    : (array[index] & mask) >> from_bit;
                 return ret;
             }
 
@@ -141,12 +130,11 @@ namespace org.unirail.collections
             public int next1(int bit)
             {
                 var index = bit >> LEN;
-                if (used() <= index) return -1;
-
-                for (var i = array[index] & FFFFFFFFFFFFFFFF << bit;; i = array[index])
+                if(used() <= index) return -1;
+                for(var i = array[index] & FFFFFFFFFFFFFFFF << bit;; i = array[index])
                 {
-                    if (i       != 0) return index * BITS + BitOperations.TrailingZeroCount(i);
-                    if (++index == _used) return -1;
+                    if(i       != 0) return index * BITS + BitOperations.TrailingZeroCount(i);
+                    if(++index == _used) return -1;
                 }
             }
 
@@ -154,25 +142,22 @@ namespace org.unirail.collections
             public int next0(int bit)
             {
                 var index = bit >> LEN;
-                if (used() <= index) return bit;
-
-                for (var i = ~array[index] & FFFFFFFFFFFFFFFF << bit;; i = ~array[index])
+                if(used() <= index) return bit;
+                for(var i = ~array[index] & FFFFFFFFFFFFFFFF << bit;; i = ~array[index])
                 {
-                    if (i       != 0) return index * BITS + BitOperations.TrailingZeroCount(i);
-                    if (++index == _used) return _used * BITS;
+                    if(i       != 0) return index * BITS + BitOperations.TrailingZeroCount(i);
+                    if(++index == _used) return _used * BITS;
                 }
             }
 
             public int prev1(int bit)
             {
                 var index = bit >> LEN;
-                if (used() <= index) return last1() - 1;
-
-
-                for (var i = array[index] & FFFFFFFFFFFFFFFF >> -(bit + 1);; i = array[index])
+                if(used() <= index) return last1() - 1;
+                for(var i = array[index] & FFFFFFFFFFFFFFFF >> -(bit + 1);; i = array[index])
                 {
-                    if (i       != 0) return (index + 1) * BITS - 1 - BitOperations.LeadingZeroCount(i);
-                    if (index-- == 0) return -1;
+                    if(i       != 0) return (index + 1) * BITS - 1 - BitOperations.LeadingZeroCount(i);
+                    if(index-- == 0) return -1;
                 }
             }
 
@@ -180,12 +165,11 @@ namespace org.unirail.collections
             public int prev0(int bit)
             {
                 var index = bit >> LEN;
-                if (used() <= index) return bit;
-
-                for (var i = ~array[index] & FFFFFFFFFFFFFFFF >> -(bit + 1);; i = ~array[index])
+                if(used() <= index) return bit;
+                for(var i = ~array[index] & FFFFFFFFFFFFFFFF >> -(bit + 1);; i = ~array[index])
                 {
-                    if (i       != 0) return (index + 1) * BITS - 1 - BitOperations.LeadingZeroCount(i);
-                    if (index-- == 0) return -1;
+                    if(i       != 0) return (index + 1) * BITS - 1 - BitOperations.LeadingZeroCount(i);
+                    if(index-- == 0) return -1;
                 }
             }
 
@@ -199,35 +183,30 @@ namespace org.unirail.collections
             public int rank(int bit)
             {
                 var max = bit >> LEN;
-
-                if (max < used())
-                    for (int i = 0, sum = 0;; i++)
-                        if (i < max) sum += BitOperations.PopCount(array[i]);
+                if(max < used())
+                    for(int i = 0, sum = 0;; i++)
+                        if(i < max) sum += BitOperations.PopCount(array[i]);
                         else return sum + BitOperations.PopCount(array[i] & FFFFFFFFFFFFFFFF >> BITS - (bit + 1));
-
                 return cardinality();
             }
 
 
             public int cardinality()
             {
-                for (int i = 0, sum = 0;; i++)
-                    if (i < used()) sum += BitOperations.PopCount(array[i]);
+                for(int i = 0, sum = 0;; i++)
+                    if(i < used()) sum += BitOperations.PopCount(array[i]);
                     else return sum;
             }
 
             public int bit(int cardinality)
             {
                 int i = 0, c = 0;
-                while ((c += BitOperations.PopCount(array[i])) < cardinality) i++;
-
+                while((c += BitOperations.PopCount(array[i])) < cardinality) i++;
                 var v = array[i];
                 var z = BitOperations.LeadingZeroCount(v);
-
-                for (var p = 1UL << BITS - 1; cardinality < c; z++)
-                    if ((v & p >> z) != 0)
+                for(var p = 1UL << BITS - 1; cardinality < c; z++)
+                    if((v & p >> z) != 0)
                         c--;
-
                 return i * 32 + BITS - z;
             }
 
@@ -239,7 +218,7 @@ namespace org.unirail.collections
                 R dst = new RW(0);
                 dst.Count = Count;
                 dst._used = _used;
-                if (0 < array.Length) array = (ulong[])array.Clone();
+                if(0 < array.Length) array = (ulong[])array.Clone();
                 return dst;
             }
 
@@ -250,31 +229,26 @@ namespace org.unirail.collections
             {
                 var _size = Count;
                 var max   = _size / BITS;
-
-                if (dst == null) dst = new StringBuilder((max + 1) * 68);
+                if(dst == null) dst = new StringBuilder((max + 1) * 68);
                 else dst.EnsureCapacity(dst.Length + (max     + 1) * 68);
                 dst.Append(string.Format("%-8s%-8s%-8s%-8s%-8s%-8s%-8s%-7s%s", "0", "7", "15", "23", "31", "39", "47", "55", "63"));
                 dst.Append('\n');
                 dst.Append(string.Format("%-8s%-8s%-8s%-8s%-8s%-8s%-8s%-7s%s", "|", "|", "|", "|", "|", "|", "|", "|", "|"));
                 dst.Append('\n');
-
-                for (var i = 0; i < max; i++)
+                for(var i = 0; i < max; i++)
                 {
                     var v = array[i];
-                    for (var s = 0; s < BITS; s++)
+                    for(var s = 0; s < BITS; s++)
                         dst.Append((v & 1UL << s) == 0 ? '.' : '*');
                     dst.Append(i * BITS);
                     dst.Append('\n');
                 }
-
-                if (0 < (_size &= 63))
+                if(0 < (_size &= 63))
                 {
                     var v = array[max];
-                    for (var s = 0; s < _size; s++)
+                    for(var s = 0; s < _size; s++)
                         dst.Append((v & 1UL << s) == 0 ? '.' : '*');
                 }
-
-
                 return dst;
             }
 
@@ -333,7 +307,7 @@ namespace org.unirail.collections
             public override bool Remove(bool item)
             {
                 var i = IndexOf(item);
-                if (i < 0) return false;
+                if(i < 0) return false;
                 remove(i);
                 return true;
             }
@@ -347,39 +321,32 @@ namespace org.unirail.collections
 
             public RW(int length)
             {
-                if (0 < length) array = new ulong[(length - 1 >> LEN) + 1];
+                if(0 < length) array = new ulong[(length - 1 >> LEN) + 1];
             }
 
             public RW(bool fill_value, int Count)
             {
                 var len = len4bits(this.Count = Count);
                 array = new ulong[len];
-
                 _used = len | IO;
-
-                if (fill_value) set1(0, Count - 1);
+                if(fill_value) set1(0, Count - 1);
             }
 
             public RW(R src, int from_bit, int to_bit)
             {
-                if (src.Count <= from_bit) return;
+                if(src.Count <= from_bit) return;
                 Count = Math.Min(to_bit, src.Count - 1) - from_bit;
-
                 var i2 = src.get(to_bit) ? to_bit : src.prev1(to_bit);
-
-                if (i2 == -1) return;
-
+                if(i2 == -1) return;
                 array = new ulong[(i2 - 1 >> LEN) + 1];
                 _used = array.Length | IO;
-
                 int
-                    i1    = src.get(from_bit) ? from_bit : src.next1(from_bit),
-                    index = i1 >> LEN,
-                    max   = (i2 >> LEN) + 1,
-                    i     = 0;
-
-                for (var v = src.array[index] >> i1;; v >>= i1, i++)
-                    if (index + 1 < max)
+                i1    = src.get(from_bit) ? from_bit : src.next1(from_bit),
+                index = i1 >> LEN,
+                max   = (i2 >> LEN) + 1,
+                i     = 0;
+                for(var v = src.array[index] >> i1;; v >>= i1, i++)
+                    if(index + 1 < max)
                         array[i] = v | (v = src.array[index + i]) << BITS - i1;
                     else
                     {
@@ -389,75 +356,62 @@ namespace org.unirail.collections
             }
 
 
-            public void and(R and)
+            public void and (R and)
             {
-                if (this == and) return;
-
-                if (and.used() < used())
-                    while (_used > and._used)
+                if(this == and) return;
+                if(and.used() < used())
+                    while(_used > and._used)
                         array[--_used] = 0;
-
-                for (var i = 0; i < _used; i++) array[i] &= and.array[i];
-
+                for(var i = 0; i < _used; i++) array[i] &= and.array[i];
                 _used |= IO;
             }
 
 
-            public void or(R or)
+            public void or (R or)
             {
-                if (or.used() < 1 || this == or) return;
-
+                if(or.used() < 1 || this == or) return;
                 var u = _used;
-                if (used() < or.used())
+                if(used() < or.used())
                 {
-                    if (array.Length < or._used) Array.Resize(ref array, Math.Max(2 * array.Length, or._used));
+                    if(array.Length < or._used) Array.Resize(ref array, Math.Max(2 * array.Length, or._used));
                     _used = or._used;
                 }
-
                 var min = Math.Min(u, or._used);
-
-                for (var i = 0; i < min; i++)
+                for(var i = 0; i < min; i++)
                     array[i] |= or.array[i];
-
-                if (min      < or._used) Array.Copy(or.array, min, array,    min, or._used - min);
-                else if (min < u) Array.Copy(array,           min, or.array, min, u        - min);
+                if(min      < or._used) Array.Copy(or.array, min, array,    min, or._used - min);
+                else if(min < u) Array.Copy(array,           min, or.array, min, u        - min);
             }
 
 
             public void xor(R xor)
             {
-                if (xor.used() < 1 || xor == this) return;
-
+                if(xor.used() < 1 || xor == this) return;
                 var u = _used;
-                if (used() < xor.used())
+                if(used() < xor.used())
                 {
-                    if (array.Length < xor._used) Array.Resize(ref array, Math.Max(2 * array.Length, xor._used));
+                    if(array.Length < xor._used) Array.Resize(ref array, Math.Max(2 * array.Length, xor._used));
                     _used = xor._used;
                 }
-
                 var min = Math.Min(u, xor._used);
-                for (var i = 0; i < min; i++)
+                for(var i = 0; i < min; i++)
                     array[i] ^= xor.array[i];
-
-                if (min      < xor._used) Array.Copy(xor.array, min, array,     min, xor._used - min);
-                else if (min < u) Array.Copy(array,             min, xor.array, min, u         - min);
-
+                if(min      < xor._used) Array.Copy(xor.array, min, array,     min, xor._used - min);
+                else if(min < u) Array.Copy(array,             min, xor.array, min, u         - min);
                 _used |= IO;
             }
 
             public void andNot(R not)
             {
-                for (var i = Math.Min(used(), not.used()) - 1; -1 < i; i--) array[i] &= ~not.array[i];
-
+                for(var i = Math.Min(used(), not.used()) - 1; -1 < i; i--) array[i] &= ~not.array[i];
                 _used |= IO;
             }
 
             public bool intersects(R set)
             {
-                for (var i = Math.Min(_used, set._used) - 1; i >= 0; i--)
-                    if ((array[i] & set.array[i]) != 0)
+                for(var i = Math.Min(_used, set._used) - 1; i >= 0; i--)
+                    if((array[i] & set.array[i]) != 0)
                         return true;
-
                 return false;
             }
 
@@ -465,52 +419,44 @@ namespace org.unirail.collections
 
             void length(int bits)
             {
-                if (0 < bits)
+                if(0 < bits)
                 {
-                    if (bits < Count)
+                    if(bits < Count)
                     {
                         set0(bits, Count + 1);
                         Count = bits;
                     }
-
                     Array.Resize(ref array, (int)(index((uint)bits) + 1));
-
                     _used |= IO;
                     return;
                 }
-
                 Count = 0;
                 _used = 0;
-                array = bits == 0 ? Array.Empty<ulong>() : new ulong[index((uint)-bits) + 1];
+                array = bits == 0 ? Array.Empty<ulong>() : new ulong[index((uint) - bits) + 1];
             }
 
             public void flip(int bit)
             {
                 var index                                                          = used(bit);
-                if ((array[index] ^= 1UL << bit) == 0 && index + 1 == _used) _used |= IO;
+                if((array[index] ^= 1UL << bit) == 0 && index + 1 == _used) _used |= IO;
             }
 
 
             public void flip(int from_bit, int to_bit)
             {
-                if (from_bit == to_bit) return;
-
+                if(from_bit == to_bit) return;
                 var from_index = from_bit >> LEN;
                 var to_index   = used(to_bit - 1);
-
                 var from_mask = FFFFFFFFFFFFFFFF << from_bit;
                 var to_mask   = FFFFFFFFFFFFFFFF >> -to_bit;
-
-                if (from_index == to_index)
+                if(from_index == to_index)
                 {
-                    if ((array[from_index] ^= from_mask & to_mask) == 0 && from_index + 1 == _used) _used |= IO;
+                    if((array[from_index] ^= from_mask & to_mask) == 0 && from_index + 1 == _used) _used |= IO;
                 }
                 else
                 {
                     array[from_index] ^= from_mask;
-
-                    for (var i = from_index + 1; i < to_index; i++) array[i] ^= FFFFFFFFFFFFFFFF;
-
+                    for(var i = from_index + 1; i < to_index; i++) array[i] ^= FFFFFFFFFFFFFFFF;
                     array[to_index] ^= to_mask;
                     _used           |= IO;
                 }
@@ -518,8 +464,8 @@ namespace org.unirail.collections
 
             public void set(int index, params bool[] values)
             {
-                for (int i = 0, max = values.Length; i < max; i++)
-                    if (values[i]) set1(index + i);
+                for(int i = 0, max = values.Length; i < max; i++)
+                    if(values[i]) set1(index + i);
                     else set0(index           + i);
             }
 
@@ -535,7 +481,7 @@ namespace org.unirail.collections
 
             public void set(int bit, bool value)
             {
-                if (value)
+                if(value)
                     set1(bit);
                 else
                     set0(bit);
@@ -543,7 +489,7 @@ namespace org.unirail.collections
 
             public void set(int bit, int value)
             {
-                if (value == 0)
+                if(value == 0)
                     set0(bit);
                 else
                     set1(bit);
@@ -551,7 +497,7 @@ namespace org.unirail.collections
 
             public void set(int bit, int value, int TRUE)
             {
-                if (value == TRUE)
+                if(value == TRUE)
                     set1(bit);
                 else
                     set0(bit);
@@ -559,22 +505,17 @@ namespace org.unirail.collections
 
             public void set1(int from_bit, int to_bit)
             {
-                if (from_bit == to_bit) return;
-
+                if(from_bit == to_bit) return;
                 var from_index = from_bit >> LEN;
                 var to_index   = used(to_bit - 1);
-
                 var from_mask = FFFFFFFFFFFFFFFF << from_bit;
                 var to_mask   = FFFFFFFFFFFFFFFF >> -to_bit;
-
-                if (from_index == to_index) array[from_index] |= from_mask & to_mask;
+                if(from_index == to_index) array[from_index] |= from_mask & to_mask;
                 else
                 {
                     array[from_index] |= from_mask;
-
-                    for (var i = from_index + 1; i < to_index; i++)
+                    for(var i = from_index + 1; i < to_index; i++)
                         array[i] = FFFFFFFFFFFFFFFF;
-
                     array[to_index] |= to_mask;
                 }
             }
@@ -582,7 +523,7 @@ namespace org.unirail.collections
 
             public void set(int from_bit, int to_bit, bool value)
             {
-                if (value)
+                if(value)
                     set1(from_bit, to_bit);
                 else
                     set0(from_bit, to_bit);
@@ -591,12 +532,10 @@ namespace org.unirail.collections
 
             public void set0(int bit)
             {
-                if (Count <= bit) Count = bit + 1;
-
+                if(Count <= bit) Count = bit + 1;
                 var index = bit >> LEN;
-
-                if (index < used())
-                    if (index + 1 == _used && (array[index] &= ~(1UL << bit)) == 0) _used |= IO;
+                if(index < used())
+                    if(index + 1 == _used && (array[index] &= ~(1UL << bit)) == 0) _used |= IO;
                     else
                         array[index] &= ~(1UL << bit);
             }
@@ -604,37 +543,29 @@ namespace org.unirail.collections
 
             public void set0(int from_bit, int to_bit)
             {
-                if (Count <= to_bit) Count = to_bit + 1;
-
-                if (from_bit == to_bit) return;
-
+                if(Count <= to_bit) Count = to_bit + 1;
+                if(from_bit == to_bit) return;
                 var from_index = from_bit >> LEN;
-                if (used() <= from_index) return;
-
+                if(used() <= from_index) return;
                 var to_index = to_bit - 1 >> LEN;
-                if (_used <= to_index)
+                if(_used <= to_index)
                 {
                     to_bit   = last1();
                     to_index = _used - 1;
                 }
-
                 var from_mask = FFFFFFFFFFFFFFFF << from_bit;
                 var to_mask   = FFFFFFFFFFFFFFFF >> -to_bit;
-
-                if (from_index == to_index)
+                if(from_index == to_index)
                 {
-                    if ((array[from_index] &= ~(from_mask & to_mask)) == 0)
-                        if (from_index + 1 == _used)
+                    if((array[from_index] &= ~(from_mask & to_mask)) == 0)
+                        if(from_index + 1 == _used)
                             _used |= IO;
                 }
                 else
                 {
                     array[from_index] &= ~from_mask;
-
-                    for (var i = from_index + 1; i < to_index; i++) array[i] = 0;
-
+                    for(var i = from_index + 1; i < to_index; i++) array[i] = 0;
                     array[to_index] &= ~to_mask;
-
                     _used |= IO;
                 }
             }
@@ -643,49 +574,39 @@ namespace org.unirail.collections
 
             public void add(ulong src, int bits)
             {
-                if (BITS < bits) bits = BITS;
-
+                if(BITS < bits) bits = BITS;
                 var size = Count;
                 Count += bits;
-
-                if ((src &= ~(1UL << bits - 1)) == 0) return;
-
+                if((src &= ~(1UL << bits - 1)) == 0) return;
                 used(size + BITS - BitOperations.LeadingZeroCount(src));
-
                 var bit = (int)(size & MASK);
-
-                if (bit == 0) array[index((uint)Count)] = src;
+                if(bit == 0) array[index((uint)Count)] = src;
                 else
                 {
                     array[index((uint)size)] &= src                                             << bit | mask(bit);
-                    if (index((uint)size) < index((uint)Count)) array[index((uint)Count)] = src >> bit;
+                    if(index((uint)size) < index((uint)Count)) array[index((uint)Count)] = src >> bit;
                 }
             }
 
             public void add(int key, bool value)
             {
-                if (key < last1())
+                if(key < last1())
                 {
                     var index = key >> LEN;
-
                     ulong m = FFFFFFFFFFFFFFFF << key, v = array[index];
-
                     m = (v & m) << 1 | v & ~m;
-
-                    if (value) m |= 1UL << key;
-
-                    while (++index < _used)
+                    if(value) m |= 1UL << key;
+                    while(++index < _used)
                     {
                         array[index       - 1] = m;
                         var t = v >> BITS - 1;
                         v = array[index];
                         m = v << 1 | t;
                     }
-
                     array[index - 1] =  m;
                     _used            |= IO;
                 }
-                else if (value)
+                else if(value)
                 {
                     var index1 = used(key); //!!!
                     array[index1] |= 1UL << key;
@@ -695,37 +616,29 @@ namespace org.unirail.collections
 
             public void clear()
             {
-                for (used(); _used > 0;) array[--_used] = 0;
+                for(used(); _used > 0;) array[--_used] = 0;
                 Count = 0;
             }
 
 
             public void remove(int bit)
             {
-                if (Count <= bit) return;
-
+                if(Count <= bit) return;
                 Count--;
-
                 var index = bit >> LEN;
-                if (used() <= index) return;
-
-
+                if(used() <= index) return;
                 var last = last1();
-                if (bit      == last) set0(bit);
-                else if (bit < last)
+                if(bit      == last) set0(bit);
+                else if(bit < last)
                 {
                     ulong m = FFFFFFFFFFFFFFFF << bit, v = array[index];
-
                     v = v >> 1 & m | v & ~m;
-
-                    while (++index < _used)
+                    while(++index < _used)
                     {
                         m = array[index];
-
                         array[index - 1] = (m & 1) << BITS - 1 | v;
                         v                = m >> 1;
                     }
-
                     array[index - 1] =  v;
                     _used            |= IO;
                 }

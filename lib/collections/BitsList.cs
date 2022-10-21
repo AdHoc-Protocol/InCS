@@ -49,7 +49,7 @@ namespace org.unirail.collections
         public static byte value(ulong prev, ulong next, int bit, int bits, ulong mask) => (byte)(((next & BitsList.mask(bit + bits - BITS)) << BITS - bit | prev >> bit) & mask);
 
         public const int  LEN  = 6;
-        public const int  BITS = 1<<LEN;
+        public const int  BITS = 1 << LEN;
         public const uint MASK = BITS - 1;
 
         static int len4bits(uint bits) => (int)((bits + BITS) >> LEN);
@@ -81,11 +81,10 @@ namespace org.unirail.collections
                 {
                     var _index = (uint)index((uint)(item *= bits));
                     var _bit   = bit((uint)item);
-
                     var index1 = _index + 1;
                     return BITS < _bit + bits
-                               ? value(values[_index], values[index1], _bit, bits, mask)
-                               : value(values[_index], _bit,           mask);
+                           ? value(values[_index], values[index1], _bit, bits, mask)
+                           : value(values[_index], _bit,           mask);
                 }
                 set => throw new NotImplementedException();
             }
@@ -112,8 +111,8 @@ namespace org.unirail.collections
             protected R(int bits_per_item, int default_value, int Count) : this(bits_per_item, Count)
             {
                 this.Count = Count;
-                if ((this.default_value = (byte)(default_value & 0xFF)) != 0)
-                    while (-1 < --Count)
+                if((this.default_value = (byte)(default_value & 0xFF)) != 0)
+                    while(-1 < --Count)
                         set(this, Count, default_value);
             }
 
@@ -121,11 +120,8 @@ namespace org.unirail.collections
             public override int GetHashCode()
             {
                 var i = index((uint)Count);
-
                 var hash = HashCode.Combine(149989999, values[i] & (ulong)((1L << bit((uint)Count)) - 1));
-
-                while (-1 < --i) hash = HashCode.Combine(hash, values[i]);
-
+                while(-1 < --i) hash = HashCode.Combine(hash, values[i]);
                 return hash;
             }
 
@@ -139,7 +135,6 @@ namespace org.unirail.collections
             {
                 var i = index((uint)Count);
                 var m = (1UL << bit((uint)Count)) - 1;
-
                 return other           != null                  &&
                        other.Count     == Count                 &&
                        (values[i] & m) == (other.values[i] & m) &&
@@ -154,61 +149,54 @@ namespace org.unirail.collections
                 //if value < 0 - cleanup and allocate spase
                 set
                 {
-                    if (0 < value)
+                    if(0 < value)
                     {
-                        if (value < Count) Count = value;
-
+                        if(value < Count) Count = value;
                         Array.Resize(ref values, len4bits((uint)(value * bits)));
                         return;
                     }
-
-                    if (values.Length == value) clear();
+                    if(values.Length == value) clear();
                     else
                     {
                         Count = 0;
                         values = value == 0
-                                     ? Array.Empty<ulong>()
-                                     : new ulong[len4bits((uint)(-value * bits))];
+                                 ? Array.Empty<ulong>()
+                                 : new ulong[len4bits((uint)(-value * bits))];
                     }
                 }
             }
 
             protected void clear()
             {
-                for (var i = index((uint)(bits * Count)) + 1; -1 < --i;) values[i] = 0;
+                for(var i = index((uint)(bits * Count)) + 1; -1 < --i;) values[i] = 0;
                 Count = 0;
             }
 
             protected internal static void write(R dst, int size)
             {
-                if (dst.length < len4bits((uint)((dst.Count = size) * dst.bits))) dst.length = -size * dst.bits;
+                if(dst.length < len4bits((uint)((dst.Count = size) * dst.bits))) dst.length = -size * dst.bits;
             }
 
 
             protected static void add(R dst, int item, byte value)
             {
-                if (dst.Count <= item)
+                if(dst.Count <= item)
                 {
                     set(dst, item, value);
                     return;
                 }
-
                 var p = (uint)(item * dst.bits);
-
                 item = index(p);
-
                 var src  = dst.values;
                 var dst_ = dst.values;
-
-                if (dst.length * BITS < p) dst.length = -Math.Max(dst.length + dst.length / 2, len4bits(p));
-
+                if(dst.length * BITS < p) dst.length = -Math.Max(dst.length + dst.length / 2, len4bits(p));
                 var v    = value & dst.mask;
                 var _bit = bit(p);
-                if (0 < _bit)
+                if(0 < _bit)
                 {
                     var i = src[item];
                     var k = BITS - _bit;
-                    if (k < dst.bits)
+                    if(k < dst.bits)
                     {
                         dst_[item] = i << k >> k | v         << _bit;
                         v          = v      >> k | i >> _bit << dst.bits - k;
@@ -218,44 +206,41 @@ namespace org.unirail.collections
                         dst_[item] = i << k >> k | v << _bit | i >> _bit << _bit + dst.bits;
                         v          = i      >> _bit                              + dst.bits | src[item + 1] << k - dst.bits & dst.mask;
                     }
-
                     item++;
                 }
-
                 dst.Count++;
-
-                for (var max = len4bits((uint)(dst.Count * dst.bits));;)
+                for(var max = len4bits((uint)(dst.Count * dst.bits));;)
                 {
                     var i = src[item];
                     dst_[item] = i << dst.bits | v;
-                    if (max < ++item) break;
+                    if(max < ++item) break;
                     v = i >> BITS - dst.bits;
                 }
             }
 
             protected static void set(R dst, int from, params byte[] src)
             {
-                for (var i = src.Length; -1 < --i;) set(dst, from + i, src[i]);
+                for(var i = src.Length; -1 < --i;) set(dst, from + i, src[i]);
             }
 
             protected static void set(R dst, int from, params ushort[] src)
             {
-                for (var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
+                for(var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
             }
 
             protected static void set(R dst, int from, params short[] src)
             {
-                for (var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
+                for(var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
             }
 
             protected static void set(R dst, int from, params int[] src)
             {
-                for (var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
+                for(var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
             }
 
             protected static void set(R dst, int from, params long[] src)
             {
-                for (var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
+                for(var i = src.Length; -1 < --i;) set(dst, from + i, (byte)src[i]);
             }
 
             protected static void set(R dst, int item, byte src)
@@ -264,29 +249,22 @@ namespace org.unirail.collections
                 var p      = (uint)(item * dst.bits);
                 var _index = index(p);
                 var _bit   = bit(p);
-
                 var k = BITS - _bit;
                 var i = dst.values[_index];
-
-                if (item < dst.Count)
+                if(item < dst.Count)
                 {
-                    if (k < dst.bits)
+                    if(k < dst.bits)
                     {
                         dst.values[_index]     = i                      << k            >> k            | v << _bit;
                         dst.values[_index + 1] = dst.values[_index + 1] >> dst.bits - k << dst.bits - k | v >> k;
                     }
                     else dst.values[_index] = ~(~0UL >> BITS - dst.bits << _bit) & i | v << _bit;
-
                     return;
                 }
-
-                if (dst.length <= item) dst.length = Math.Max(dst.length + dst.length / 2, len4bits((uint)(p + dst.bits)));
-
-                if (dst.default_value != 0)
-                    for (var t = dst.Count; t < item; t++) set2(dst, item, dst.default_value);
-			
+                if(dst.length <= item) dst.length = Math.Max(dst.length + dst.length / 2, len4bits((uint)(p + dst.bits)));
+                if(dst.default_value != 0)
+                    for(var t = dst.Count; t < item; t++) set2(dst, item, dst.default_value);
                 set2(dst, item, src);
-
                 dst.Count = item + 1;
             }
 
@@ -296,11 +274,9 @@ namespace org.unirail.collections
                 var p      = (uint)(item * dst.bits);
                 var _index = index(p);
                 var _bit   = bit(p);
-
                 var k = BITS - _bit;
                 var i = dst.values[_index];
-                
-                if (k < dst.bits)
+                if(k < dst.bits)
                 {
                     dst.values[_index]     = i << k >> k | v << _bit;
                     dst.values[_index + 1] = v >> k;
@@ -312,39 +288,33 @@ namespace org.unirail.collections
 
             protected static void removeAt(R dst, int item)
             {
-                if (item + 1 == dst.Count)
+                if(item + 1 == dst.Count)
                 {
-                    if (dst.default_value == 0) set2(dst, item, 0); //zeroed place
+                    if(dst.default_value == 0) set2(dst, item, 0);  //zeroed place
                     dst.Count--;
                     return;
                 }
-
                 var _index = index((uint)(item *= dst.bits));
                 var _bit   = bit((uint)item);
-
                 var k = BITS - _bit;
                 var i = dst.values[_index];
-
-                if (_index + 1 == dst.length)
+                if(_index + 1 == dst.length)
                 {
-                    if (_bit          == 0) dst.values[_index]       = i           >> dst.bits;
-                    else if (k        < dst.bits) dst.values[_index] = i      << k >> k;
-                    else if (dst.bits < k) dst.values[_index]        = i << k >> k | i >> _bit + dst.bits << _bit;
-
+                    if(_bit          == 0) dst.values[_index]       = i           >> dst.bits;
+                    else if(k        < dst.bits) dst.values[_index] = i      << k >> k;
+                    else if(dst.bits < k) dst.values[_index]        = i << k >> k | i >> _bit + dst.bits << _bit;
                     dst.Count--;
                     return;
                 }
-
-                if (_bit   == 0) dst.values[_index] = i >>= dst.bits;
-                else if (k < dst.bits)
+                if(_bit   == 0) dst.values[_index] = i >>= dst.bits;
+                else if(k < dst.bits)
                 {
                     var ii = dst.values[_index + 1];
-
                     dst.values[_index]   = i << k >> k | ii >> _bit + dst.bits - BITS << _bit;
                     dst.values[++_index] = i = ii >> dst.bits;
                 }
-                else if (dst.bits < k)
-                    if (_index + 1 == dst.values.Length)
+                else if(dst.bits < k)
+                    if(_index + 1 == dst.values.Length)
                     {
                         dst.values[_index] = i << k >> k | i >> _bit + dst.bits << _bit;
                         dst.Count--;
@@ -353,18 +323,15 @@ namespace org.unirail.collections
                     else
                     {
                         var ii = dst.values[_index + 1];
-
                         dst.values[_index]   = i << k >> k | i >> _bit + dst.bits << _bit | ii << BITS - dst.bits;
                         dst.values[++_index] = i = ii >> dst.bits;
                     }
-
-                for (var max = dst.Count * dst.bits; _index * BITS < max;)
+                for(var max = dst.Count * dst.bits; _index * BITS < max;)
                 {
                     var ii = dst.values[_index + 1];
                     dst.values[_index]   = i << dst.bits >> dst.bits | ii << BITS - dst.bits;
                     dst.values[++_index] = i = ii        >> dst.bits;
                 }
-
                 dst.Count--;
             }
 
@@ -373,7 +340,7 @@ namespace org.unirail.collections
             {
                 var dst = new RW(bits);
                 dst.Count = Count;
-                if (0 < dst.length) dst.values = (ulong[])values.Clone();
+                if(0 < dst.length) dst.values = (ulong[])values.Clone();
                 return dst;
             }
 
@@ -382,32 +349,27 @@ namespace org.unirail.collections
 
             public StringBuilder ToString(StringBuilder? dst)
             {
-                if (dst == null) dst = new StringBuilder(Count * 4);
+                if(dst == null) dst = new StringBuilder(Count * 4);
                 else dst.EnsureCapacity(dst.Length + Count     * 4);
-
                 var src = values[(uint)0];
-                for (int bp = 0, max = Count * bits, i = 1; bp < max; bp += bits, i++)
+                for(int bp = 0, max = Count * bits, i = 1; bp < max; bp += bits, i++)
                 {
                     var _bit   = bit((uint)bp);
                     var index1 = (uint)(index((uint)bp) + 1);
                     var _value = (long)(BITS < _bit + bits
-                                            ? value(src, src = values[index1], _bit, bits, mask)
-                                            : value(src, _bit,                 mask));
-
+                                        ? value(src, src = values[index1], _bit, bits, mask)
+                                        : value(src, _bit,                 mask));
                     dst.Append(_value).Append('\t');
-
-                    if (i % 10 == 0) dst.Append('\t').Append(i / 10 * 10).Append('\n');
+                    if(i % 10 == 0) dst.Append('\t').Append(i / 10 * 10).Append('\n');
                 }
-
                 return dst;
             }
 
             public int indexOf(byte value)
             {
-                for (int item = 0, max = Count * bits; item < max; item += bits)
-                    if (value == this[item])
+                for(int item = 0, max = Count * bits; item < max; item += bits)
+                    if(value == this[item])
                         return item / bits;
-
                 return -1;
             }
 
@@ -415,10 +377,9 @@ namespace org.unirail.collections
 
             public int lastIndexOf(int from, byte value)
             {
-                for (var i = from; -1 < --i;)
-                    if (value == this[i])
+                for(var i = from; -1 < --i;)
+                    if(value == this[i])
                         return i;
-
                 return -1;
             }
 
@@ -429,12 +390,11 @@ namespace org.unirail.collections
             protected static bool remove(R dst, byte value)
             {
                 var ret = false;
-                for (var i = dst.Count; -1 < (i = dst.lastIndexOf(i, value));)
+                for(var i = dst.Count; -1 < (i = dst.lastIndexOf(i, value));)
                 {
                     ret = true;
                     removeAt(dst, i);
                 }
-
                 return ret;
             }
 
@@ -442,12 +402,10 @@ namespace org.unirail.collections
 
             public byte[] toArray(byte[] dst)
             {
-                if (Count == 0) return null;
-                if (dst == null || dst.Length < Count) dst = new byte[Count];
-
-                for (int item = 0, max = Count * bits; item < max; item += bits)
+                if(Count == 0) return null;
+                if(dst == null || dst.Length < Count) dst = new byte[Count];
+                for(int item = 0, max = Count * bits; item < max; item += bits)
                     dst[item / bits] = this[item];
-
                 return dst;
             }
 
@@ -543,12 +501,10 @@ namespace org.unirail.collections
             public bool retainAll(R chk)
             {
                 var fix = Count;
-
                 byte v;
-                for (var item = 0; item < Count; item++)
-                    if (!chk.contains(v = this[item]))
+                for(var item = 0; item < Count; item++)
+                    if(!chk.contains(v = this[item]))
                         remove(this, v);
-
                 return fix != Count;
             }
 
