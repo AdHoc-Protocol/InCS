@@ -1,321 +1,415 @@
-// AdHoc protocol - data interchange format and source code generator
-// Copyright 2020 Chikirev Sirguy, Unirail Group. All rights reserved.
-// cheblin@gmail.org
-// https://github.com/orgs/AdHoc-Protocol
+//  MIT License
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
+//  Copyright © 2020 Chikirev Sirguy, Unirail Group. All rights reserved.
+//  For inquiries, please contact:  al8v5C6HU4UtqE9@gmail.com
+//  GitHub Repository: https://github.com/AdHoc-Protocol
 //
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to use,
+//  copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+//  the Software, and to permit others to do so, under the following conditions:
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//  1. The above copyright notice and this permission notice must be included in all
+//     copies or substantial portions of the Software.
+//
+//  2. Users of the Software must provide a clear acknowledgment in their user
+//     documentation or other materials that their solution includes or is based on
+//     this Software. This acknowledgment should be prominent and easily visible,
+//     and can be formatted as follows:
+//     "This product includes software developed by Chikirev Sirguy and the Unirail Group
+//     (https://github.com/AdHoc-Protocol)."
+//
+//  3. If you modify the Software and distribute it, you must include a prominent notice
+//     stating that you have changed the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+//  OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 
-namespace org.unirail.collections
+namespace org.unirail.collections;
+
+public interface BitsNullList<T> where T : struct
 {
-    public interface BitsNullList
+    // Abstract class representing a read-only list of bits with nullable values
+    abstract class R : BitsList<T>.R
     {
-        abstract class R : BitsList.R, IList < byte? >
+        public T null_val { get; protected set; } // The value representing null
+
+        // Constructor with bits per item and null value
+        protected R(int bits_per_item, T null_val) : base(bits_per_item) => this.null_val = (T)(ValueType)null_val;
+
+        // Constructor with bits per item, null value, and count
+        protected R(int bits_per_item, T null_val, int Count) : base(bits_per_item, null_val, Count) => this.null_val = null_val;
+
+        // Constructor with bits per item, null value, default value, and count
+        protected R(int bits_per_item, T null_val, T default_value, int Count) : base(bits_per_item, default_value, Count) => this.null_val = null_val;
+
+        // Checks if the value at the specified index is not the null value
+        public bool hasValue(int index) => !this[index].Equals(null_val);
+
+        // Checks if the list contains the specified item
+        public bool Contains(T? item) => 0 < IndexOf(item);
+
+        // Finds the index of the specified item
+        public int IndexOf(T? item) => item == null ?
+            indexOf(null_val) :
+            indexOf(item.Value);
+
+        // Indexer to get or set nullable values
+        public virtual T? this[int index]
         {
-            public virtual void Add(byte? item) { throw new NotImplementedException(); }
-
-            public bool Contains(byte? item) => 0 < IndexOf(item);
-
-            public void CopyTo(byte?[] array, int arrayIndex) { throw new NotImplementedException(); }
-
-            public virtual bool Remove(byte? item) { throw new NotImplementedException(); }
-
-            public int IndexOf(byte ? item) => item == null ? indexOf(null_val) : indexOf(item.Value);
-
-            public virtual void Insert(int index, byte? item) { throw new NotImplementedException(); }
-
-            public virtual byte? this[int item]
+            get
             {
-                get
+                var v = base[index];
+                return v.Equals(null_val) ?
+                    null :
+                    v;
+            }
+            set => throw new NotImplementedException("BitsList.R is readonly");
+        }
+
+        // Gets the raw value at the specified index
+        public T raw(int index) => base[index];
+
+        // Clones the current object
+        R Clone()
+        {
+            return (R)base.Clone();
+        }
+
+        // Converts the list to a string representation
+        StringBuilder ToString(StringBuilder? dst)
+        {
+            if (dst == null) dst = new StringBuilder(Count * 4);
+            else dst.EnsureCapacity(dst.Length + Count * 4);
+            var src = values[(uint)0];
+            for (int bp = 0, max = Count * bits, i = 1; bp < max; bp += bits, i++)
+            {
+                var _bit = BitsList<T>.bit((uint)bp);
+                var index = (uint)(BitsList<T>.index((uint)bp) + 1);
+                var _value = (long)(ValueType)(BitsList<T>.BITS < _bit + bits ?
+                    BitsList<T>.value(src, src = values[index], _bit, bits, mask) :
+                    BitsList<T>.value(src, _bit, mask));
+                if (_value.Equals(null_val)) dst.Append("null");
+                else dst.Append(_value);
+                dst.Append('\t');
+                if (i % 10 == 0) dst.Append('\t').Append(i / 10 * 10).Append('\n');
+            }
+
+            return dst;
+        }
+
+        // Gets an enumerator for the list
+        public Enumerator GetEnumerator() => new Enumerator(this);
+    }
+
+    // Enumerator for iterating through the list
+    public struct Enumerator : IEnumerator<T?>, IEnumerator
+    {
+        private readonly R _list;
+        private int _index;
+
+        private T? _current;
+
+        // Constructor initializing the enumerator with the list
+        internal Enumerator(R list)
+        {
+            _list = list;
+            _index = 0;
+            _current = default;
+        }
+
+        public void Dispose()
+        {
+        }
+
+        // Moves to the next item in the list
+        public bool MoveNext()
+        {
+            _current = _list[_index];
+            _index++;
+            return true;
+        }
+
+        public T? Current => _current!;
+
+        object? IEnumerator.Current => Current;
+
+        // Resets the enumerator
+        void IEnumerator.Reset()
+        {
+            _index = 0;
+            _current = default;
+        }
+    }
+
+    // Read-write implementation of the list
+    class RW : R
+    {
+        // Constructor with bits per item and null value
+        public RW(int bits_per_item, T null_val) : base(bits_per_item, null_val)
+        {
+        }
+
+        // Constructor with bits per item, null value, and count
+        public RW(int bits_per_item, T null_val, int Count) : base(bits_per_item, null_val, Count)
+        {
+        }
+
+        // Constructor with bits per item, null value, default value, and count
+        public RW(int bits_per_item, T null_val, T? default_value, int Count) : base(bits_per_item, null_val, default_value == null ?
+            null_val :
+            default_value.Value, Count)
+        {
+        }
+
+        // Sets the value at the specified index
+        public void Set(int item, int value) => set(this, item, value);
+
+        // Removes the specified item from the list
+        public bool Remove(T? item)
+        {
+            var i = IndexOf(item);
+            if (i < 0) return false;
+            removeAt(i);
+            return true;
+        }
+
+        // Inserts an item at the specified index
+        public void Insert(int index, T? item) => Add1(item == null ?
+            null_val :
+            item.Value);
+
+        // Clears the list
+        public void Clear() => clear();
+
+        // Removes the item at the specified index
+        public void RemoveAt(int index) => removeAt(index);
+
+        // Adds an item to the list
+        public void Add1(T? value) => Add1(Count, value);
+        public void Add1(T value) => Add1(Count, value);
+
+        // Adds an item at the specified index
+        public void Add1(int index, T? value) => Add1(index, value ?? null_val);
+
+        public void Add1(int index, T src)
+        {
+            if (index < Count) add(this, index, src);
+            else Set(index, src);
+        }
+
+        // Removes the specified value from the list
+        public void remove(T? value) => remove(this, value ?? null_val);
+        public void remove(T value) => remove(this, value);
+
+        // Removes the item at the specified index
+        public void removeAt(int item) => removeAt(this, item);
+
+        // Indexer to get or set the value at the specified index
+        public override T? this[int item]
+        {
+            get => base[item];
+            set => set1(this, item, value ?? null_val);
+        }
+
+        // Sets the raw value at the specified index
+        public void raw(int index, int value) => set1(this, index, (T)(ValueType)value);
+
+        // Sets multiple values starting from the specified index
+        public RW Set(int item, params T?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple sbyte values starting from the specified index
+        public RW Set(int item, params sbyte?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple short values starting from the specified index
+        public RW Set(int item, params short?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple ushort values starting from the specified index
+        public RW Set(int item, params ushort?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple int values starting from the specified index
+        public RW Set(int item, params int?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple uint values starting from the specified index
+        public RW Set(int item, params uint?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple long values starting from the specified index
+        public RW Set(int item, params long?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets multiple ulong values starting from the specified index
+        public RW Set(int item, params ulong?[] values)
+        {
+            for (var i = values.Length; -1 < --i;)
+                set1(this, item + i, values[i] == null ?
+                    null_val :
+                    (T)(ValueType)values[i]!.Value);
+            return this;
+        }
+
+        // Sets a single value at the specified index
+        public RW Set1(int item, T value)
+        {
+            set1(this, item, (T)(ValueType)value);
+            return this;
+        }
+
+        // Sets multiple values starting from the specified index
+        public RW Set(int item, params T[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple sbyte values starting from the specified index
+        public RW Set(int item, params sbyte[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple short values starting from the specified index
+        public RW Set(int item, params short[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple ushort values starting from the specified index
+        public RW Set(int item, params ushort[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple int values starting from the specified index
+        public RW Set(int item, params int[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple uint values starting from the specified index
+        public RW Set(int item, params uint[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple long values starting from the specified index
+        public RW Set(int item, params long[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Sets multiple ulong values starting from the specified index
+        public RW Set(int item, params ulong[] values)
+        {
+            set(this, item, values);
+            return this;
+        }
+
+        // Clones the current object
+        public new RW Clone() => (RW)base.Clone();
+
+        // Adjusts the length to fit the number of items
+        public RW Fit()
+        {
+            Capacity = base.Count;
+            return this;
+        }
+
+        // Property to get or set the length of the list
+        public new int Capacity
+        {
+            get => base.Capacity();
+            set
+            {
+                if (value < 1)
                 {
-                    var v = get(item);
-                    return v == null_val ? null : v;
+                    values = Array.Empty<ulong>();
+                    Count = 0;
                 }
-                set => throw new NotImplementedException();
-            }
-
-            public byte get(int item)
-            {
-                var index = (uint)BitsList.index((uint)(item *= bits));
-                var bit   = BitsList.bit((uint)item);
-                return BitsList.BITS < bit + bits ? BitsList.value(values[index], values[index + 1], bit, bits, mask) : BitsList.value(values[index], bit, mask);
-            }
-
-            public byte null_val { get; protected set; }
-
-            protected R(int null_val, int bits_per_item) : base(bits_per_item) { this.null_val = (byte)null_val; }
-
-
-            protected R(int null_val, int bits_per_item, int count) : base(bits_per_item, count)
-            {
-                if((this.null_val = (byte)null_val) != 0) nulls(this, 0, count);
-            }
-
-            protected R(int null_val, int bits_per_item, int fill_value, int Count) : base(bits_per_item, Count)
-            {
-                this.null_val = (byte)null_val;
-                this.Count    = Count;
-                if(fill_value == 0) return;
-                while(-1      < --Count) set(this, Count, fill_value);
-            }
-
-
-            protected static void nulls(R dst, int from, int upto)
-            {
-                while(from < upto) set(dst, from++, dst.null_val);
-            }
-
-            public bool hasValue(int index) { return this[index] != null_val; }
-
-            R Clone() { return (R)base.Clone(); }
-
-            IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
-
-            public IEnumerator < byte? > GetEnumerator() => new Enumerator(this);
-
-            public struct Enumerator : IEnumerator < byte? >, IEnumerator
-            {
-                private readonly IList < byte? > _list;
-                private          int          _index;
-
-                private byte? _current;
-
-                internal Enumerator(IList < byte? > list)
-                {
-                    _list    = list;
-                    _index   = 0;
-                    _current = default;
-                }
-
-                public void Dispose() { }
-
-                public bool MoveNext()
-                {
-                    _current = _list[_index];
-                    _index++;
-                    return true;
-                }
-
-                public byte? Current => _current!;
-
-                object? IEnumerator.Current => Current;
-
-
-                void IEnumerator.Reset()
-                {
-                    _index   = 0;
-                    _current = default;
-                }
-            }
-
-            StringBuilder ToString(StringBuilder? dst)
-            {
-                if(dst == null) dst = new StringBuilder(Count * 4);
-                else dst.EnsureCapacity(dst.Length + Count     * 4);
-                var src = values[(uint)0];
-                for(int bp = 0, max = Count * bits, i = 1; bp < max; bp += bits, i++)
-                {
-                    var  _bit   = BitsList.bit((uint)bp);
-                    var index  = (uint)(BitsList.index((uint)bp) + 1);
-                    var  _value = (long)(BitsList.BITS < _bit + bits ? BitsList.value(src, src = values[index], _bit, bits, mask) : BitsList.value(src, _bit, mask));
-                    if(_value == null_val) dst.Append("null");
-                    else dst.Append(_value);
-                    dst.Append('\t');
-                    if(i % 10 == 0) dst.Append('\t').Append(i / 10 * 10).Append('\n');
-                }
-                return dst;
+                else Capacity(value);
             }
         }
 
-        class RW : R
+        // Property to get or set the count of items in the list
+        public new int Count
         {
-            public override void Add(byte? item)            => this[Count] = item;
-            public          void set(int   item, int value) => set(this, item, value);
-
-            public override bool Remove(byte? item)
+            get => base.Count;
+            set
             {
-                var i = IndexOf(item);
-                if(i < 0) return false;
-                removeAt(i);
-                return true;
+                if (value < 1) Clear();
+                else if (base.Count < value) Set1(value - 1, default_value);
+                else base.Count = value;
             }
+        }
 
-            public override void Insert(int index, byte ? item) => add(item == null ? null_val : item.Value);
-
-            public override void Clear() => clear();
-
-
-            public override bool IsReadOnly { get; }
-
-            public override void RemoveAt(int index) => removeAt(index);
-
-            public RW(int null_val, int bits_per_item) : base(null_val, bits_per_item) { }
-
-            public RW(int null_val, int bits_per_item, int count) : base(null_val, bits_per_item, count) { }
-
-            public RW(int null_val, int bits_per_item, int ? fill_value, int items) : base(null_val, bits_per_item, fill_value ?? null_val, items) { }
-
-
-            public RW(int null_val, int bits_per_item, params byte[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params byte?[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params ushort[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params ushort?[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params short[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params short?[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params int[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params int?[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params long[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public RW(int null_val, int bits_per_item, params long?[] values) : base(null_val, bits_per_item, values.Length) { set(0, values); }
-
-
-            public void add(byte? value) => add(Count, value);
-            public void add(byte  value) => add(Count, value);
-
-
-            public void add(int index, byte? value) => add(index, value ?? null_val);
-
-            public void add(int index, byte src)
-            {
-                if(index < Count) add(this, index, src);
-                else set(index, src);
-            }
-
-
-            public void remove(byte? value) { remove(this, value ?? null_val); }
-            public void remove(byte  value) { remove(this, value); }
-
-
-            public void removeAt(int item) { removeAt(this, item); }
-
-
-            public override byte? this[int item] { get => base[item]; set => set(this, item, value ?? null_val); }
-
-
-            public void set(int item, params byte?[] values)
-            {
-                var fix = Count;
-                for(var i = values.Length; -1 < --i;)
-                    set(this, item + i, values[i] ?? null_val);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params ushort?[] values)
-            {
-                var fix = Count;
-                for(var i = values.Length; -1 < --i;)
-                    set(this, item + i, values[i] ?? null_val);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params short?[] values)
-            {
-                var fix = Count;
-                for(var i = values.Length; -1 < --i;)
-                    set(this, item + i, values[i] ?? null_val);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params int?[] values)
-            {
-                var fix = Count;
-                for(var i = values.Length; -1 < --i;)
-                    set(this, item + i, values[i] ?? null_val);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params long?[] values)
-            {
-                var fix = Count;
-                for(var i = values.Length; -1 < --i;)
-                    set(this, item + i, values[i] ?? null_val);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params byte[] values)
-            {
-                var fix = Count;
-                set(this, item, values);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params ushort[] values)
-            {
-                var fix = Count;
-                set(this, item, values);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params short[] values)
-            {
-                var fix = Count;
-                set(this, item, values);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params int[] values)
-            {
-                var fix = Count;
-                set(this, item, values);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void set(int item, params long[] values)
-            {
-                var fix = Count;
-                set(this, item, values);
-                if(fix < item && null_val != 0) nulls(this, fix, item);
-            }
-
-            public void clear()
-            {
-                if(Count < 1) return;
-                nulls(this, 0, Count);
-                Count = 0;
-            }
-
-            public new RW Clone() { return (RW)base.Clone(); }
+        // Resizes the list to the specified size
+        public RW Resize(int size)
+        {
+            Count = size;
+            return this;
         }
     }
 }

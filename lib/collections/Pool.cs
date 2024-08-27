@@ -1,4 +1,4 @@
-//  MIT License
+﻿//  MIT License
 //
 //  Copyright © 2020 Chikirev Sirguy, Unirail Group. All rights reserved.
 //  For inquiries, please contact:  al8v5C6HU4UtqE9@gmail.com
@@ -29,3 +29,44 @@
 //  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
 //  OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //  SOFTWARE.
+
+using System;
+using System.Collections.Generic;
+
+namespace org.unirail.collections;
+
+// Class to implement a pool of objects of type T
+public class Pool<T>
+{
+    // WeakReference to a Stack of items of type T
+    // WeakReference allows the Garbage Collector to collect the object if there are no strong references to it
+    private WeakReference<Stack<T>> items = new(new Stack<T>(5));
+
+    // Factory method to create new instances of type T
+    private readonly Func<T> factory;
+
+    // Constructor that takes a factory method as parameter
+    public Pool(Func<T> factory) => this.factory = factory;
+
+    // Method to get an item from the pool
+    public T get()
+    {
+        // Try to get the target Stack from the WeakReference
+        // If successful, try to pop an item from the Stack
+        // If unsuccessful, create a new item using the factory method
+        return items.TryGetTarget(out var i) && i.TryPop(out var item) ?
+            item :
+            factory();
+    }
+
+    // Method to put an item back into the pool
+    public void put(T item)
+    {
+        // Try to get the target Stack from the WeakReference
+        // If unsuccessful, create a new Stack and update the WeakReference
+        if (!items.TryGetTarget(out var s)) items = new WeakReference<Stack<T>>(s = new Stack<T>(5));
+
+        // Push the item back into the Stack
+        s.Push(item);
+    }
+}
