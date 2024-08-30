@@ -440,11 +440,15 @@ namespace org.unirail{
                     if( receive_mate.Buffer == null ) host.buffers(receive_mate);
 
                     stop_receiving = false;
-                    if( !this.ext!.ReceiveAsync(receive_mate) ) receive(); //trigger receiving
 
-                    if( transmitter == null ) return;
+                    if( transmitter == null ) {
+                        if( !this.ext!.ReceiveAsync(receive_mate) ) receive(); //trigger receiving
+                        return;
+                    }
+
                     transmit_lock = 0; //unlock
                     if( Buffer == null ) host.buffers(this);
+                    if( !this.ext!.ReceiveAsync(receive_mate) ) receive(); //trigger receiving
 
                     on_connected?.Invoke(this);
 
