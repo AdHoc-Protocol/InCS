@@ -68,8 +68,8 @@ public class TwoBytesKeyMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>
     static TwoBytesKeyMap()
     {
         if( Unsafe.SizeOf<K>() != 2 ) throw new InvalidOperationException($"The Key type {typeof(K).Name} is {Unsafe.SizeOf<K>()} bytes, but must be 2 bytes.");
-
     }
+
     public TwoBytesKeyMap() : this(0) { }
 
     public TwoBytesKeyMap(int capacity)
@@ -107,7 +107,7 @@ public class TwoBytesKeyMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>
             if( TryGetValue(key, out var value) ) return value;
             throw new KeyNotFoundException("The given key was not present in the map.");
         }
-        set => TryInsert(key, value, false);
+        set => TryInsert(key, value, true);
     }
 
     public void Add(K key, V value)

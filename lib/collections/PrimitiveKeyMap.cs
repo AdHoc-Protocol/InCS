@@ -92,7 +92,7 @@ public class PrimitiveKeyMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V
             if( TryGetValue(key, out var value) ) return value;
             throw new KeyNotFoundException("The given key was not present in the map.");
         }
-        set => TryInsert(key, value, false);
+        set => TryInsert(key, value, true);
     }
 
     public void Add(K key, V value)

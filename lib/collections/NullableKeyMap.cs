@@ -104,8 +104,7 @@ public class NullableKeyMap<K, V> : IDictionary<K?, V>, IReadOnlyDictionary<K?, 
     /// <param name="comparer">The <see cref="IEqualityComparer{K}"/> implementation to use when comparing keys, or null to use the default <see cref="EqualityComparer{K}.Default"/> for the type of the key.</param>
     /// <exception cref="ArgumentNullException">dictionary is null.</exception>
     /// <exception cref="ArgumentException">dictionary contains one or more duplicate keys.</exception>
-    public NullableKeyMap(IDictionary<K?, V> dictionary, IEqualityComparer<K>? comparer)
-        : this(dictionary?.Count ?? 0, comparer)
+    public NullableKeyMap(IDictionary<K?, V> dictionary, IEqualityComparer<K>? comparer) : this(dictionary?.Count ?? 0, comparer)
     {
         ArgumentNullException.ThrowIfNull(dictionary);
         AddRange(dictionary);
@@ -318,7 +317,7 @@ public class NullableKeyMap<K, V> : IDictionary<K?, V>, IReadOnlyDictionary<K?, 
         var oldEntries                                                       = _entries;
         var oldLoSize                                                        = _loSize;
         var oldHiSize                                                        = _hiSize;
-        if( _links.Length < 0xFF && _links.Length < _buckets.Length ) _links = _buckets;//reuse buckets as links
+        if( _links.Length < 0xFF && _links.Length < _buckets.Length ) _links = _buckets; //reuse buckets as links
         Initialize(newSize);
 
         for( var i = 0; i                              < oldLoSize; i++ ) Copy(in oldEntries![i]);
@@ -548,7 +547,8 @@ public class NullableKeyMap<K, V> : IDictionary<K?, V>, IReadOnlyDictionary<K?, 
             return true;
         }
 
-        private          KeyValuePair<K?, V>  _current;
+        private KeyValuePair<K?, V> _current;
+
         public KeyValuePair<K?, V> Current => _version != _map._version ?
                                                   throw new InvalidOperationException("Collection was modified during enumeration.") :
                                                   _index == int.MaxValue - 1 || _index == -2 || _index == -1 && !_map._hasNullKey ?

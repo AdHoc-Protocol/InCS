@@ -110,7 +110,7 @@ public class NullableTwoBytesKeyMap<K, V> : IDictionary<K?, V>, IReadOnlyDiction
 
             throw new KeyNotFoundException();
         }
-        set => TryInsert(key, value, false);
+        set => TryInsert(key, value, true);
     }
 
     public void Add(K? key, V value)
