@@ -2256,6 +2256,10 @@ public interface BitList{
         /// <param name="dstIndex">The zero-based index in the array at which copying begins.</param>
         public void CopyTo(bool[] dst, int dstIndex)
         {
+            ArgumentNullException.ThrowIfNull(dst);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
             for( var i = 0; i < count; i++ )
                 dst[dstIndex + i] = Get(i);
         }

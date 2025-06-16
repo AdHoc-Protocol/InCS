@@ -312,7 +312,7 @@ public struct NullableByteSet<K> : ISet<K?>, IReadOnlySet<K?> where K : unmanage
     {
         if( ++key >= 256 ) return INVALID; // No more keys in the 0-255 range
 
-        var index       = key >> 6;
+        var index = key >> 6;
 
         var word = _bits.GetElement(index) >> (key & 63); // Shift to make the current bit the LSB
 
@@ -333,35 +333,23 @@ public struct NullableByteSet<K> : ISet<K?>, IReadOnlySet<K?> where K : unmanage
     IEnumerator<K?> IEnumerable<K?>.GetEnumerator() => GetEnumerator();
 
     public struct Enumerator : IEnumerator<K?>{
-        private readonly NullableByteSet<K> _set;// This is a copy, consistent with struct semantics
+        private readonly NullableByteSet<K> _set; // This is a copy, consistent with struct semantics
 
-        private int _index;   // -2=before null, -1=null, 0-255=byte key, INVALID=-1 if no more byte keys
-        private K?  _current; // Stores the current element
+        private int _key; // -2=before null, -1=null, 0-255=byte key, INVALID=-1 if no more byte keys
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Enumerator(in NullableByteSet<K> set)
         {
             _set = set;
 
-            _index = _set._hasNullKey ?
-                         -2 :                        // Start before the null element
-                         INVALID; // Start by looking for the first byte key
-            _current = default;
+            _key = _set._hasNullKey ?
+                       -2 :     // Start before the null element
+                       INVALID; // Start by looking for the first byte key
         }
 
-        public K? Current
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get
-            {
-                // If _index is -2 (before start), or it's INVALID and we already returned null (finished),
-                // or it's INVALID and we didn't have null (finished), then throw.
-                if( _index == -2 || (_index == INVALID && _current == null) )
-                    throw new InvalidOperationException("Enumeration has either not started or has already finished.");
-
-                return _current;
-            }
-        }
+        public K? Current => _key is -2 or INVALID ?
+                                 throw new InvalidOperationException("Enumeration has either not started or has already finished.") :
+                                 Unsafe.As<int, K>(ref _key);
 
         object? IEnumerator.Current => Current;
 
@@ -369,44 +357,31 @@ public struct NullableByteSet<K> : ISet<K?>, IReadOnlySet<K?> where K : unmanage
         public bool MoveNext()
         {
             // Handle the null key first
-            if( _index == -2 )
+            if( _key == -2 )
             {
-                _index   = -1; // Move to the null element
-                _current = null;
+                _key = -1; // Move to the null element
                 return true;
             }
 
-            // If null key was just processed (or wasn't present and _index was initialized to INVALID),
+            // If null key was just processed (or wasn't present and _key was initialized to INVALID),
             // start searching for byte keys from the appropriate position.
-            _index = _index == -1 ?       // Just returned null, now look for first byte key
-                         _set.Next1(-1) : // Find the first byte key (starting search from -1)
-                         // _index currently holds a byte key, find the next one
-                         _set.Next1(_index);
+            _key = _key == -1 ?         // Just returned null, now look for first byte key
+                       _set.Next1(-1) : // Find the first byte key (starting search from -1)
+                       // _key currently holds a byte key, find the next one
+                       _set.Next1(_key);
 
             // Check if a byte key was found
-            if( _index != INVALID )
-            {
-                // Convert the int byte key back to K? and store it
-                var byteKey = (byte)_index;
-                _current = Unsafe.As<byte, K>(ref byteKey);
-                return true;
-            }
-            else
-            {
-                // No more byte keys (and null already handled or not present)
-                _current = default;                    // Clear current element
-                _index   = INVALID; // Mark as finished (or no more byte keys)
-                return false;
-            }
+            if( _key != INVALID ) return true;
+            _key = int.MaxValue;
+            return false;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Reset()
         {
-            _index = _set._hasNullKey ?
-                         -2 :
-                         INVALID;
-            _current = default;
+            _key = _set._hasNullKey ?
+                       -2 :
+                       INVALID;
         }
 
         public void Dispose() { }
@@ -451,9 +426,9 @@ public struct NullableByteSet<K> : ISet<K?>, IReadOnlySet<K?> where K : unmanage
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void CopyTo(K?[] dst, int dstIndex)
     {
-        if( dst == null ) throw new ArgumentNullException(nameof(dst));
-        if( dstIndex < 0 || dstIndex > dst.Length ) throw new ArgumentOutOfRangeException(nameof(dstIndex));
-        if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not large enough.", nameof(dst));
+        ArgumentNullException.ThrowIfNull(dst);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+        if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
 
         if( Count == 0 ) return;
 

@@ -951,8 +951,8 @@ public interface NullableObjectList<T> where T : class{
         public void CopyTo(T?[] dst, int dstIndex)
         {
             ArgumentNullException.ThrowIfNull(dst);
-            if ( dstIndex              < 0 ) throw new ArgumentOutOfRangeException(nameof(dstIndex), "Array index must be non-negative.");
-            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not large enough to hold the elements.");
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
 
             if( Count == 0 ) return;
 

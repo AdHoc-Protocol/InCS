@@ -40,12 +40,13 @@ namespace org.unirail.collections;
 /// <typeparam name="K">Key type, restricted to a 1-byte unmanaged type (e.g., byte or sbyte).
 /// This is enforced by a static constructor check.</typeparam>
 public struct ByteSet<K> : ISet<K>, IReadOnlySet<K> where K : unmanaged{
-    private  Vector256<ulong> _bits    = Vector256<ulong>.Zero; // 256 bits: 4 ulongs for keys 0-63, 64-127, 128-191, 192-255
-     /// <summary>
+    private Vector256<ulong> _bits = Vector256<ulong>.Zero; // 256 bits: 4 ulongs for keys 0-63, 64-127, 128-191, 192-255
+
+    /// <summary>
     /// Tracks modifications to the set for enumeration consistency.
     /// Incremented on any operation that changes the set's contents (add, remove, clear, bulk operations).
     /// </summary>
-    internal uint             _version = 0;                     // Tracks modifications for enumeration consistency
+    internal uint _version = 0; // Tracks modifications for enumeration consistency
 
     /// <summary>
     /// Tracks the total number of elements in the set.
@@ -69,7 +70,7 @@ public struct ByteSet<K> : ISet<K>, IReadOnlySet<K> where K : unmanaged{
         get => _count switch
                {
                    -1 => throw new InvalidOperationException("Set is not valid."), // Cannot use an invalid set
-                   -2 => _count = BitOperations.PopCount(_bits.GetElement(0)) + // Recalculate PopCount for all 4 ulong segments
+                   -2 => _count = BitOperations.PopCount(_bits.GetElement(0)) +    // Recalculate PopCount for all 4 ulong segments
                                   BitOperations.PopCount(_bits.GetElement(1)) +
                                   BitOperations.PopCount(_bits.GetElement(2)) +
                                   BitOperations.PopCount(_bits.GetElement(3)),
@@ -307,14 +308,14 @@ public struct ByteSet<K> : ISet<K>, IReadOnlySet<K> where K : unmanaged{
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Enumerator(in ByteSet<K> set)
         {
-            _set = set;     // Copy the struct instance.
+            _set = set; // Copy the struct instance.
             Reset();
         }
 
         public K Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _key is INVALID or int.MaxValue - 1 ?
+            get => _key is INVALID or int.MaxValue ?
                        throw new InvalidOperationException("Enumeration has either not started or has already finished.") :
                        Unsafe.As<int, K>(ref _key);
         }
@@ -324,8 +325,9 @@ public struct ByteSet<K> : ISet<K>, IReadOnlySet<K> where K : unmanaged{
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
         {
-            if( ++_key != int.MaxValue && (_key = _set.Next1(_key)) != -1 ) return true;
-            _key = int.MaxValue - 1;
+            if( _key                      == int.MaxValue ) return false;
+            if( (_key = _set.Next1(_key)) != -1 ) return true;
+            _key = int.MaxValue;
             return false;
         }
 
@@ -350,9 +352,9 @@ public struct ByteSet<K> : ISet<K>, IReadOnlySet<K> where K : unmanaged{
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void CopyTo(K[] dst, int dstIndex)
     {
-        if( dst == null ) throw new ArgumentNullException(nameof(dst));
-        if( dstIndex < 0 || dst.Length <= dstIndex ) throw new ArgumentOutOfRangeException(nameof(dstIndex));
-        if( dst.Length - dstIndex < Count ) throw new IndexOutOfRangeException("Destination array is not large enough.");
+        ArgumentNullException.ThrowIfNull(dst);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+        if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
 
         if( _count == 0 ) return;
 

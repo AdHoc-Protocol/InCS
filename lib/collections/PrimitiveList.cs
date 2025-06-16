@@ -523,8 +523,8 @@ public interface PrimitiveList<T> where T : struct{
         public void CopyTo(T[] dst, int dstIndex)
         {
             ArgumentNullException.ThrowIfNull(dst);
-            ArgumentOutOfRangeException.ThrowIfNegative(dstIndex);
-            if( Count > dst.Length - dstIndex ) throw new ArgumentException("Destination array is not long enough to copy all items.", nameof(dst));
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
 
             Array.Copy(values, 0, dst, dstIndex, count);
         }

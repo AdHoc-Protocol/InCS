@@ -285,11 +285,15 @@ public class NullableByteMap<K, V> : IDictionary<K?, V?>, IReadOnlyDictionary<K?
     /// <summary>Checks if the map contains the specified key-value pair.</summary>
     public bool Contains(KeyValuePair<K?, V?> item) => TryGetValue(item.Key, out var value) && equal_hash_V.Equals(value, item.Value);
 
-    /// <summary>Copies all key-value pairs to an array starting at the specified index.</summary>
-    public void CopyTo(KeyValuePair<K?, V?>[] array, int arrayIndex)
+    /// <summary>Copies all key-value pairs to an dst starting at the specified index.</summary>
+    public void CopyTo(KeyValuePair<K?, V?>[] dst, int dstIndex)
     {
+        ArgumentNullException.ThrowIfNull(dst);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+        if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
         foreach( var kvp in this )
-            array[arrayIndex++] = kvp;
+            dst[dstIndex++] = kvp;
     }
 
 
@@ -319,11 +323,15 @@ public class NullableByteMap<K, V> : IDictionary<K?, V?>, IReadOnlyDictionary<K?
         /// <summary>Not supported - throws NotSupportedException.</summary>
         public bool Remove(K? item) => throw new NotSupportedException();
 
-        /// <summary>Copies all keys to an array starting at the specified index.</summary>
-        public void CopyTo(K?[] array, int arrayIndex)
+        /// <summary>Copies all keys to an dst starting at the specified index.</summary>
+        public void CopyTo(K?[] dst, int dstIndex)
         {
+            ArgumentNullException.ThrowIfNull(dst);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
             foreach( var kvp in _map )
-                array[arrayIndex++] = kvp.Key;
+                dst[dstIndex++] = kvp.Key;
         }
 
         /// <summary>Gets an enumerator for iterating over the keys.</summary>
@@ -358,11 +366,15 @@ public class NullableByteMap<K, V> : IDictionary<K?, V?>, IReadOnlyDictionary<K?
         /// <summary>Not supported - throws NotSupportedException.</summary>
         public bool Remove(V? item) => throw new NotSupportedException();
 
-        /// <summary>Copies all values to an array starting at the specified index.</summary>
-        public void CopyTo(V?[] array, int arrayIndex)
+        /// <summary>Copies all values to an dst starting at the specified index.</summary>
+        public void CopyTo(V?[] dst, int dstIndex)
         {
+            ArgumentNullException.ThrowIfNull(dst);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
             foreach( var kvp in _map )
-                array[arrayIndex++] = kvp.Value;
+                dst[dstIndex++] = kvp.Value;
         }
 
         /// <summary>Gets an enumerator for iterating over the values.</summary>
@@ -418,9 +430,10 @@ public class NullableByteMap<K, V> : IDictionary<K?, V?>, IReadOnlyDictionary<K?
                 return true;
             }
 
-            if( _key == int.MaxValue || (_key = _map.keys.Next1(_key)) == -1 )
+            if( _key == int.MaxValue ) return false;
+            if( (_key = _map.keys.Next1(_key)) == -1 )
             {
-                _key = int.MaxValue - 1;
+                _key = int.MaxValue ;
                 return false;
             }
 
@@ -437,7 +450,7 @@ public class NullableByteMap<K, V> : IDictionary<K?, V?>, IReadOnlyDictionary<K?
 
         public KeyValuePair<K?, V> Current => _version != _map.keys._version ?
                                                   throw new InvalidOperationException("Collection was modified during enumeration.") :
-                                                  _key == int.MaxValue - 1 || _key == -2 || _key == -1 && !_map.HasNullKey ?
+                                                  _key == int.MaxValue  || _key == -2 || _key == -1 && !_map.HasNullKey ?
                                                       throw new InvalidOperationException("Enumeration has either not started or has finished.") :
                                                       _current;
 
@@ -525,7 +538,7 @@ public class NullableByteMap<K, V> : IDictionary<K?, V?>, IReadOnlyDictionary<K?
 
         internal KeyEnumerator(NullableByteMap<K, V> map)
         {
-            _map     = map;
+            _map = map;
             Reset();
         }
 

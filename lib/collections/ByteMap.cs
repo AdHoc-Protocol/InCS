@@ -244,11 +244,15 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
     /// <summary>Checks if the map contains the specified key-value pair.</summary>
     public bool Contains(KeyValuePair<K, V> item) => TryGetValue(item.Key, out var value) && equal_hash_V.Equals(value, item.Value);
 
-    /// <summary>Copies all key-value pairs to an array starting at the specified index.</summary>
-    public void CopyTo(KeyValuePair<K, V>[] array, int arrayIndex)
+    /// <summary>Copies all key-value pairs to an dst starting at the specified index.</summary>
+    public void CopyTo(KeyValuePair<K, V>[] dst, int dstIndex)
     {
+        ArgumentNullException.ThrowIfNull(dst);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+        if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
         foreach( var kvp in this )
-            array[arrayIndex++] = kvp;
+            dst[dstIndex++] = kvp;
     }
 
     /// <summary>
@@ -288,7 +292,7 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
 
         public KeyValuePair<K, V> Current => _version != _map.keys._version ?
                                                  throw new InvalidOperationException("Collection was modified during enumeration.") :
-                                                 _key == ByteSet<K>.INVALID ? // Check if enumeration has not started or has finished
+                                                 _key is ByteSet<K>.INVALID or int.MaxValue ? // Check if enumeration has not started or has finished
                                                      throw new InvalidOperationException("Enumeration has either not started or has finished.") :
                                                      new KeyValuePair<K, V>(Unsafe.As<int, K>(ref _key), currentValue);
 
@@ -298,9 +302,10 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
         {
             if( _version != _map.keys._version ) throw new InvalidOperationException("Collection was modified");
 
+            if( _key == int.MaxValue ) return false;
             if( (_key = _map.keys.Next1(_key)) == ByteSet<K>.INVALID )
             {
-                currentValue = default;
+                _key = int.MaxValue;
                 return false;
             }
 
@@ -322,8 +327,6 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
 
         public void Dispose() { currentValue = default; }
     }
-
-
 
 
     /// <summary>
@@ -366,10 +369,14 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
 
         public bool Remove(K item) => throw new NotSupportedException();
 
-        public void CopyTo(K[] array, int arrayIndex)
+        public void CopyTo(K[] dst, int dstIndex)
         {
+            ArgumentNullException.ThrowIfNull(dst);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
             foreach( var kvp in _map )
-                array[arrayIndex++] = kvp.Key;
+                dst[dstIndex++] = kvp.Key;
         }
 
         public IEnumerator<K> GetEnumerator() => new KeyEnumerator(_map);
@@ -436,15 +443,20 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
 
         public bool Remove(V item) => throw new NotSupportedException();
 
-        public void CopyTo(V[] array, int arrayIndex)
+        public void CopyTo(V[] dst, int dstIndex)
         {
+            ArgumentNullException.ThrowIfNull(dst);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
+
             foreach( var kvp in _map )
-                array[arrayIndex++] = kvp.Value;
+                dst[dstIndex++] = kvp.Value;
         }
 
         public IEnumerator<V> GetEnumerator() => new ValueEnumerator(_map);
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
         /// <summary>
         /// Enumerator for iterating over values in the ByteMap.
         /// </summary>
@@ -498,5 +510,4 @@ public class ByteMap<K, V> : IDictionary<K, V>, IReadOnlyDictionary<K, V>, IEqua
             public void Dispose() { currentValue = default; }
         }
     }
-
 }

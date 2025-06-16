@@ -634,10 +634,8 @@ public interface BitsList<T> where T : struct{
         public void CopyTo(T[] dst, int dstIndex)
         {
             ArgumentNullException.ThrowIfNull(dst);
-            if ( dstIndex < 0 )
-                throw new ArgumentOutOfRangeException(nameof(dstIndex), "Non-negative number required.");
-            if( dstIndex > dst.Length - count )
-                throw new ArgumentException("Destination array is not long enough to copy all the items in the collection, check array index and length.");
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)dstIndex, (uint)dst.Length);
+            if( dst.Length - dstIndex < Count ) throw new ArgumentException("Destination array is not long enough.");
 
             for( var i = 0; i < count; i++ ) { dst[dstIndex + i] = Get(i); }
         }
