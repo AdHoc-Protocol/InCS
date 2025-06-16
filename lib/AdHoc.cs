@@ -1,34 +1,19 @@
-﻿//  MIT License
+﻿// Copyright 2025 Chikirev Sirguy, Unirail Group
 //
-//  Copyright © 2020 Chikirev Sirguy, Unirail Group. All rights reserved.
-//  For inquiries, please contact:  al8v5C6HU4UtqE9@gmail.com
-//  GitHub Repository: https://github.com/AdHoc-Protocol
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//  Permission is hereby granted, free of charge, to any person obtaining a copy
-//  of this software and associated documentation files (the "Software"), to use,
-//  copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-//  the Software, and to permit others to do so, under the following conditions:
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
-//  1. The above copyright notice and this permission notice must be included in all
-//     copies or substantial portions of the Software.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
-//  2. Users of the Software must provide a clear acknowledgment in their user
-//     documentation or other materials that their solution includes or is based on
-//     this Software. This acknowledgment should be prominent and easily visible,
-//     and can be formatted as follows:
-//     "This product includes software developed by Chikirev Sirguy and the Unirail Group
-//     (https://github.com/AdHoc-Protocol)."
-//
-//  3. If you modify the Software and distribute it, you must include a prominent notice
-//     stating that you have changed the Software.
-//
-//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//  FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
-//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
-//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
-//  OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//  SOFTWARE.
+// For inquiries, please contact: al8v5C6HU4UtqE9@gmail.com
+// GitHub Repository: https://github.com/AdHoc-Protocol
 
 using System;
 using System.Buffers;
@@ -47,94 +32,207 @@ using org.unirail.collections;
 
 namespace org.unirail{
     public class AdHoc{
+        /// <summary>
+        /// Defines an interface for a source of bytes, typically used for reading data sequentially.
+        /// </summary>
         public interface BytesSrc{
-            //if 0 < return   : bytes read in DST buffer
-            //if return == 0  : may have more data but not enough space in provided DST buffer
-            //if return == -1 : no more data left
-            int               Read(byte[]                                           dst, int dst_byte, int dst_bytes);
-            Action<BytesSrc>? subscribeOnNewBytesToTransmitArrive(Action<BytesSrc>? subscriber); //Subscribe to be notified when new bytes are available for transmission
-            bool              isOpen();
-            void              Close();
-        }
+            /// <summary>
+            /// Reads a sequence of bytes from the current source and advances the position within the source by the number of bytes read.
+            /// </summary>
+            /// <param name="dst">The byte array to which data is read.</param>
+            /// <param name="dst_byte">The zero-based byte offset in <paramref name="dst"/> at which to begin storing the data read from the current source.</param>
+            /// <param name="dst_bytes">The maximum number of bytes to be read from the current source.</param>
+            /// <returns>
+            /// A positive integer indicating the total number of bytes read into the buffer <paramref name="dst"/>.
+            /// Returns 0 if <paramref name="dst_bytes"/> is 0, or if there is currently no data available but the source is still open and might provide data later (e.g., not enough space in <paramref name="dst"/> to fit a minimal unit of data).
+            /// Returns -1 if no more data is available from the source (end of stream).
+            /// </returns>
+            int Read(byte[] dst, int dst_byte, int dst_bytes);
 
-        public interface BytesDst{
-            /**
-             * write bytes
-             * ATTENTION! The data in the provided buffer "src" may change due to buffer reuse.
-             */
-            int Write(byte[] src, int src_byte, int src_bytes);
+            /// <summary>
+            /// Subscribes an action to be invoked when new bytes become available from this source.
+            /// This is typically used to signal a consumer that it can attempt to read data again.
+            /// </summary>
+            /// <param name="subscriber">The action to invoke. The `BytesSrc` instance itself is passed as an argument to the action, allowing the subscriber to identify the source.</param>
+            /// <returns>The previously subscribed action, or null if no action was previously subscribed.</returns>
+            Action<BytesSrc>? subscribeOnNewBytesToTransmitArrive(Action<BytesSrc>? subscriber);
 
+            /// <summary>
+            /// Gets a value indicating whether the byte source is currently open and available for reading.
+            /// </summary>
+            /// <returns>True if the source is open; otherwise, false.</returns>
             bool isOpen();
+
+            /// <summary>
+            /// Closes the byte source and releases any associated resources.
+            /// </summary>
             void Close();
         }
 
-        public class Stage{
-            public readonly ushort           uid;
-            public readonly string           name;
-            public readonly TimeSpan         timeout;
-            public readonly Func<int, Stage> on_transmitting;
-            public readonly Func<int, Stage> on_receiving;
+        /// <summary>
+        /// Defines an interface for a destination of bytes, typically used for writing data sequentially.
+        /// </summary>
+        public interface BytesDst{
+            /// <summary>
+            /// Writes a sequence of bytes to the current destination and advances the current position within this destination by the number of bytes written.
+            /// ATTENTION! The data in the provided buffer <paramref name="src"/> may be modified after this call due to buffer reuse by the caller.
+            /// </summary>
+            /// <param name="src">The byte array containing the data to write. </param>
+            /// <param name="src_byte">The zero-based byte offset in <paramref name="src"/> from which to begin copying bytes to the current destination.</param>
+            /// <param name="src_bytes">The number of bytes to write to the current destination.</param>
+            /// <returns>The total number of bytes successfully written to the destination. This can be less than <paramref name="src_bytes"/> if the destination cannot accept all bytes (e.g., buffer full).</returns>
+            int Write(byte[] src, int src_byte, int src_bytes);
 
-            public Stage(ushort uid, string name, TimeSpan timeout, Func<int, Stage>? on_transmitting = null, Func<int, Stage>? on_receiving = null)
-            {
-                this.uid     = uid;
-                this.name    = name;
-                this.timeout = timeout;
-                this.on_transmitting = on_transmitting ?? (
-                                                              _ => ERROR);
-                this.on_receiving = on_receiving ?? (
-                                                        _ => ERROR);
-            }
+            /// <summary>
+            /// Checks if the byte destination is open.
+            /// </summary>
+            /// <returns>True if open, false otherwise.</returns>
+            bool isOpen();
 
-            public override string ToString() => name;
-
-            public static readonly Stage EXIT = new(ushort.MaxValue, "Exit", TimeSpan.MaxValue,
-                                                    _ => ERROR,
-                                                    _ => ERROR);
-
-            public static readonly Stage ERROR = new(ushort.MaxValue, "Error", TimeSpan.MaxValue,
-                                                     _ => ERROR,
-                                                     _ => ERROR);
+            /// <summary>
+            /// Closes the byte destination.
+            /// </summary>
+            void Close();
         }
 
-        internal const uint OK         = int.MaxValue,
-                            STR        = OK         - 100,
-                            RETRY      = STR        + 1,
-                            VAL4       = RETRY      + 1,
-                            VAL8       = VAL4       + 1,
-                            INT1       = VAL8       + 1,
-                            INT2       = INT1       + 1,
-                            INT4       = INT2       + 1,
-                            LEN0       = INT4       + 1,
-                            LEN1       = LEN0       + 1,
-                            LEN2       = LEN1       + 1,
-                            BITS       = LEN2       + 1,
-                            BITS_BYTES = BITS       + 1,
-                            VARINT     = BITS_BYTES + 1;
+        /// <summary>
+        /// Defines a stage in a processing pipeline for a channel.
+        /// Stages are used to implement protocols or transformations on data flowing through a channel.
+        /// </summary>
+        /// <typeparam name="CHANNEL">The type of the channel this stage operates on.</typeparam>
+        public interface Stage<CHANNEL>{
+            /// <summary>
+            /// Called when this stage becomes active in the specified channel.
+            /// This method allows the stage to initialize itself or set up connections.
+            /// </summary>
+            /// <param name="channel">The channel in which this stage is being activated.</param>
+            /// <param name="prev_stage">The stage that was active before this one, if any.</param>
+            /// <param name="on_transmit">A `BytesSrc` instance if this activation is related to transmitting data, allowing the stage to pull data. Null otherwise.</param>
+            /// <param name="on_receive_id">An identifier related to receiving data if this activation is for reception. Null otherwise.</param>
+            public void on_activate(CHANNEL channel, Stage<CHANNEL> prev_stage, Transmitter.BytesSrc? on_transmit, int? on_receive_id);
 
+            /// <summary>
+            /// Called when a timeout occurs related to the channel's operation.
+            /// </summary>
+            /// <param name="channel">The channel where the timeout occurred.</param>
+            /// <param name="transmitting">True if the timeout occurred during a transmission attempt; false if it occurred during a reception attempt or other operation.</param>
+            /// <returns>The next stage to transition to, or this stage if no transition is needed.</returns>
+            public Stage<CHANNEL> on_timeout(CHANNEL channel, bool transmitting);
+
+            /// <summary>
+            /// Called when the channel is ready to transmit data and this stage is active.
+            /// The stage should process the data from `src` and potentially pass it to the next stage or underlying transport.
+            /// </summary>
+            /// <param name="channel">The channel that is transmitting.</param>
+            /// <param name="src">The source of bytes to be transmitted.</param>
+            /// <returns>The next stage to transition to after this transmission operation, or this stage if no transition is needed.</returns>
+            public Stage<CHANNEL> on_transmitting(CHANNEL channel, Transmitter.BytesSrc src);
+
+            /// <summary>
+            /// Called when the channel has received data identified by `pack_id` and this stage is active.
+            /// The stage should handle the received data or prepare for further reception.
+            /// </summary>
+            /// <param name="channel">The channel that is receiving.</param>
+            /// <param name="pack_id">An identifier for the received packet or data unit.</param>
+            /// <returns>The next stage to transition to after this reception operation, or this stage if no transition is needed.</returns>
+            public Stage<CHANNEL> on_receiving(CHANNEL channel, int pack_id);
+        }
+
+        /// <summary>
+        /// Internal constants representing different data processing modes or states.
+        /// These are used to manage continuations and data type expectations during serialization/deserialization.
+        /// </summary>
+        internal const uint OK         = int.MaxValue,     // Indicates successful completion or normal state.
+                            STR        = OK         - 100, // Mode for processing string data.
+                            RETRY      = STR        + 1,   // Mode indicating a retry is needed, often due to insufficient data.
+                            VAL4       = RETRY      + 1,   // Mode for processing a 4-byte value.
+                            VAL8       = VAL4       + 1,   // Mode for processing an 8-byte value.
+                            INT1       = VAL8       + 1,   // Mode for processing a 1-byte signed integer.
+                            INT2       = INT1       + 1,   // Mode for processing a 2-byte signed integer.
+                            INT4       = INT2       + 1,   // Mode for processing a 4-byte signed integer.
+                            LEN0       = INT4       + 1,   // Mode for processing a length field (specific usage).
+                            LEN1       = LEN0       + 1,   // Mode for processing a length field (specific usage).
+                            LEN2       = LEN1       + 1,   // Mode for processing a length field (specific usage).
+                            BITS       = LEN2       + 1,   // Mode for bitwise processing.
+                            BITS_BYTES = BITS       + 1,   // Mode for combined bitwise and byte-level processing.
+                            VARINT     = BITS_BYTES + 1;   // Mode for processing varint encoded data.
+
+        /// <summary>
+        /// Current bit position within the `bits` field for bitwise read/write operations. Typically ranges from 0 to 7.
+        /// </summary>
         protected int bit;
 
+        /// <summary>
+        /// Temporary string buffer, often used during string deserialization.
+        /// </summary>
         public string? str;
-        public uint    bits;
 
+        /// <summary>
+        /// Buffer for accumulating bits during bitwise read/write operations.
+        /// </summary>
+        public uint bits;
+
+        /// <summary>
+        /// The primary byte buffer used for serialization or deserialization operations.
+        /// </summary>
         public byte[]? buffer;
-        public int     byte_; //position in buffer
-        public int     byte_max;
 
+        /// <summary>
+        /// The current byte offset within the `buffer` for read/write operations.
+        /// </summary>
+        public int byte_;
+
+        /// <summary>
+        /// The exclusive upper limit for byte access in the `buffer` (i.e., `buffer[byte_max - 1]` is the last accessible byte).
+        /// </summary>
+        public int byte_max;
+
+        /// <summary>
+        /// The current processing mode, indicating the type of data or operation being handled. Uses constants like `OK`, `STR`, `RETRY`.
+        /// </summary>
         public uint mode;
 
-        internal uint  u4;
-        public   ulong u8;
-        public   ulong u8_;
+        /// <summary>
+        /// Temporary buffer for a 4-byte unsigned integer value, used during partial reads or for small value processing.
+        /// </summary>
+        internal uint u4;
 
+        /// <summary>
+        /// Temporary buffer for an 8-byte unsigned integer value, used during partial reads or for general value processing.
+        /// </summary>
+        public ulong u8;
+
+        /// <summary>
+        /// Secondary temporary buffer for an 8-byte unsigned integer value, often used in conjunction with `u8` (e.g., varint operations, storing original values).
+        /// </summary>
+        public ulong u8_;
+
+        /// <summary>
+        /// Gets the value currently stored in the `u8` buffer, reinterpreted as type `T`.
+        /// This is an unsafe cast and assumes `T` is compatible with an 8-byte representation.
+        /// </summary>
+        /// <typeparam name="T">The type to reinterpret the `u8` buffer as.</typeparam>
+        /// <returns>The value from `u8` cast to type `T`.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
         public T get8<T>() => Unsafe.As<ulong, T>(ref u8);
 
         private int bytes_left;
         private int bytes_max;
 
+        /// <summary>
+        /// Gets the number of bytes remaining in the `buffer` from the current `byte_` position to `byte_max`.
+        /// </summary>
         public int remaining => byte_max - byte_;
 
+        /// <summary>
+        /// Resizes an array to a new length. If the array is expanded, new elements are filled with `fill_value`.
+        /// If the array is shrunk, elements are truncated. If lengths are equal, the original array is returned.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the array.</typeparam>
+        /// <param name="src">The source array to resize.</param>
+        /// <param name="new_length">The desired new length of the array.</param>
+        /// <param name="fill_value">The value to use for newly added elements if the array is expanded.</param>
+        /// <returns>The resized array. This may be the original array instance if `new_length` matches the original length, or a new array instance if `Array.Resize` reallocates.</returns>
         public static T[] Resize<T>(T[] src, int new_length, T fill_value)
         {
             var len = src.Length;
@@ -147,6 +245,15 @@ namespace org.unirail{
             return src;
         }
 
+        /// <summary>
+        /// Resizes a `List<T>` to a new length. If the list is expanded, new elements are added with `fillValue`.
+        /// If the list is shrunk, elements are removed from the end.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the list.</typeparam>
+        /// <param name="list">The list to resize.</param>
+        /// <param name="newLength">The desired new length of the list.</param>
+        /// <param name="fillValue">The value to use for newly added elements if the list is expanded.</param>
+        /// <returns>The original list instance, resized.</returns>
         public static List<T> Resize<T>(List<T> list, int newLength, T fillValue)
         {
             if( list.Count < newLength )
@@ -159,15 +266,16 @@ namespace org.unirail{
         }
 
         ///<summary>
-        ///Resizes the specified list to the specified new length.
-        ///If the new length is greater than the current length, the list is expanded and filled with the specified value.
-        ///If the new length is less than the current length, the list is truncated.
+        ///Resizes the specified `IList<T>` to the new length.
+        ///If `newLength` is greater than the current count, the list is expanded and new elements are filled with `fillValue`.
+        ///If `newLength` is less than the current count, the list is truncated.
+        ///This method handles `T[]` and `List<T>` efficiently, and provides a generic fallback for other `IList<T>` implementations.
         ///</summary>
         ///<typeparam name="T">The type of elements in the list.</typeparam>
         ///<param name="list">The list to resize.</param>
         ///<param name="newLength">The desired length of the list.</param>
         ///<param name="fillValue">The value to use for filling the list if it is expanded.</param>
-        ///<returns>The resized list.</returns>
+        ///<returns>The resized list. This may be a new instance if `list` was an array and resizing occurred, or the original instance for other `IList<T>` types.</returns>
         public static IList<T> Resize<T>(IList<T> list, int newLength, T fillValue)
         {
             switch( list )
@@ -191,6 +299,13 @@ namespace org.unirail{
             }
         }
 
+        /// <summary>
+        /// Converts an `IList<T>` to a `List<T>`, taking at most `max` elements from the source.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the list.</typeparam>
+        /// <param name="src">The source `IList<T>`.</param>
+        /// <param name="max">The maximum number of elements to include in the new list.</param>
+        /// <returns>A new `List<T>` containing elements from `src`, truncated or copied entirely based on `max`.</returns>
         public static List<T> toList<T>(IList<T> src, int max)
         {
             var ret = new List<T>(max);
@@ -204,6 +319,15 @@ namespace org.unirail{
             return ret;
         }
 
+        /// <summary>
+        /// Creates a new array of a specified size. If `fill` is not the default value for type `T`,
+        /// the array is filled with `fill`. Otherwise, it's returned with default-initialized elements
+        /// (which is the standard behavior for `new T[size]`).
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the array.</typeparam>
+        /// <param name="fill">The value to fill the array with if it's not the default for `T`.</param>
+        /// <param name="size">The size of the array to create.</param>
+        /// <returns>A new array of the specified size, potentially filled with `fill`.</returns>
         public static T[] sizeArray<T>(T fill, int size)
         {
             var ret = new T[size];
@@ -212,11 +336,17 @@ namespace org.unirail{
                 return ret;
 
             //Fill the array with the specified fill value
-            while( -1 < --size )
-                ret[size] = fill;
+            Array.Fill(ret, fill);
             return ret;
         }
 
+        /// <summary>
+        /// Creates a new `List<T>` of a specified size, filling it with the given `fill` value.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the list.</typeparam>
+        /// <param name="fill">The value to fill the list with.</param>
+        /// <param name="size">The desired number of elements in the list.</param>
+        /// <returns>A new `List<T>` of size `size`, with all elements initialized to `fill`.</returns>
         public static List<T> sizeList<T>(T fill, int size)
         {
             var ret = new List<T>(size);
@@ -227,10 +357,25 @@ namespace org.unirail{
         }
 
 #region CRC
+        /// <summary>
+        /// Length of the CRC checksum in bytes. Currently 2 bytes for CRC16.
+        /// </summary>
         private const int CRC_LEN_BYTES = 2; //CRC len in bytes
 
+        /// <summary>
+        /// Precomputed lookup table for CRC16 calculation (based on a 4-bit nibble).
+        /// </summary>
         private static readonly ushort[] tab = { 0, 4129, 8258, 12387, 16516, 20645, 24774, 28903, 33032, 37161, 41290, 45419, 49548, 53677, 57806, 61935 };
 
+        /// <summary>
+        /// Calculates CRC16 for a given byte, updating an existing CRC value.
+        /// This implementation is equivalent to the CRC-16/XMODEM variant.
+        /// (Reference: Similar to Redis crc16: https://github.com/redis/redis/blob/unstable/src/crc16.c)
+        /// For input "123456789", the output is 0x31C3 (decimal 12739).
+        /// </summary>
+        /// <param name="src">The input byte to include in the CRC calculation.</param>
+        /// <param name="crc">The current CRC value (intermediate or initial).</param>
+        /// <returns>The updated CRC value after processing the input byte.</returns>
         //!!!! Https://github.com/redis/redis/blob/95b1979c321eb6353f75df892ab8be68cf8f9a77/src/crc16.c
         //Output for "123456789"     : 31C3 (12739)
         private static ushort crc16(byte src, ushort crc)
@@ -240,22 +385,69 @@ namespace org.unirail{
         }
 #endregion
 
+        /// <summary>
+        /// Abstract base class for data receivers. It manages the state for deserializing
+        /// structured data from a byte stream. It extends `Context.Receiver` and implements `BytesDst`.
+        /// </summary>
         public abstract class Receiver : Context.Receiver, BytesDst{
+            /// <summary>
+            /// Internal interface used by `Receiver` to interact with message-specific deserialization logic.
+            /// </summary>
             public interface BytesDst{
+                /// <summary>
+                /// Internal method called by the `Receiver` to deserialize data for a specific message type.
+                /// Implementers should read from the `Receiver`'s buffer and update its state.
+                /// </summary>
+                /// <param name="src">The `Receiver` instance providing the byte stream and deserialization context.</param>
+                /// <returns>True if the message part was successfully processed from available bytes; false if more bytes are needed or processing is otherwise incomplete.</returns>
                 bool __put_bytes(Receiver src);
-                int  __id { get; }
+
+                /// <summary>
+                /// Gets the unique identifier for this message type or data structure.
+                /// </summary>
+                int __id { get; }
             }
 
+            /// <summary>
+            /// Defines an interface for handling events generated by a `Receiver`.
+            /// </summary>
             public interface EventsHandler{
+                /// <summary>
+                /// Called when enough bytes have been received to identify the incoming packet type,
+                /// but before the entire packet has been deserialized.
+                /// </summary>
+                /// <param name="src">The `Receiver` instance that identified the packet.</param>
+                /// <param name="dst">The `BytesDst` instance corresponding to the identified packet type.</param>
                 void onReceiving(Receiver src, BytesDst dst) { }
 
+                /// <summary>
+                /// Called when a complete packet has been successfully received and deserialized.
+                /// The packet is now ready for application-level processing.
+                /// </summary>
+                /// <param name="src">The `Receiver` instance that received the packet.</param>
+                /// <param name="dst">The `BytesDst` instance representing the fully deserialized packet.</param>
                 void onReceived(Receiver src, BytesDst dst) { }
             }
 
-            public           EventsHandler handler;
-            public           EventsHandler exchange(EventsHandler handler) => Interlocked.Exchange(ref this.handler, handler);
-            private readonly byte          id_bytes;
+            /// <summary>
+            /// The current event handler for this receiver.
+            /// </summary>
+            public EventsHandler handler;
 
+            /// <summary>
+            /// Atomically exchanges the current event handler with a new one.
+            /// </summary>
+            /// <param name="handler">The new event handler to set.</param>
+            /// <returns>The event handler that was previously set.</returns>
+            public EventsHandler exchange(EventsHandler handler) => Interlocked.Exchange(ref this.handler, handler);
+
+            private readonly byte id_bytes;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="Receiver"/> class.
+            /// </summary>
+            /// <param name="handler">The event handler for receiver events.</param>
+            /// <param name="id_bytes">The number of bytes used at the beginning of a packet to identify its type (packet ID).</param>
             public Receiver(EventsHandler handler, int id_bytes)
             {
                 this.handler = handler;
@@ -263,20 +455,50 @@ namespace org.unirail{
                 slot_ref     = new(new Slot(this, null));
             }
 
+            /// <summary>
+            /// The default error handler for `Receiver` related errors.
+            /// </summary>
             public static OnErrorHandler error_handler = OnErrorHandler.DEFAULT;
 
+            /// <summary>
+            /// Enumerates possible error types that can occur during reception.
+            /// </summary>
             public enum OnError{
-                FFFF_ERROR       = 0,
-                CRC_ERROR        = 1,
+                /// <summary>Indicates a sequence of 0xFF 0xFF was detected, which is invalid outside of specific framing contexts or suggests a synchronization issue.</summary>
+                FFFF_ERROR = 0,
+
+                /// <summary>Indicates a CRC checksum mismatch, suggesting data corruption.</summary>
+                CRC_ERROR = 1,
+
+                /// <summary>Indicates that the received byte sequence does not conform to the expected framing or encoding rules, suggesting data corruption or desynchronization.</summary>
                 BYTES_DISTORTION = 3,
-                OVERFLOW         = 4,
-                INVALID_ID       = 5
+
+                /// <summary>Indicates a buffer overflow, typically when a declared length exceeds buffer capacity or a predefined maximum.</summary>
+                OVERFLOW = 4,
+
+                /// <summary>Indicates that an invalid or unrecognized packet ID was received.</summary>
+                INVALID_ID = 5
             }
 
+            /// <summary>
+            /// Defines an interface for handling errors that occur in a `Receiver`.
+            /// </summary>
             public interface OnErrorHandler{
+                /// <summary>
+                /// A default `OnErrorHandler` implementation that logs errors to the console.
+                /// </summary>
                 static OnErrorHandler DEFAULT = new ToConsole();
 
+                /// <summary>
+                /// A concrete `OnErrorHandler` that writes error information to the console.
+                /// </summary>
                 class ToConsole : OnErrorHandler{
+                    /// <summary>
+                    /// Handles a `Receiver` error by printing details to the console.
+                    /// </summary>
+                    /// <param name="src">The `AdHoc.BytesDst` (often a `Receiver.Framing` or `Receiver` itself) where the error occurred.</param>
+                    /// <param name="error">The type of error.</param>
+                    /// <param name="ex">An optional exception associated with the error.</param>
                     public void error(AdHoc.BytesDst src, OnError error, Exception? ex = null)
                     {
                         switch( error )
@@ -310,15 +532,39 @@ namespace org.unirail{
                     }
                 }
 
+                /// <summary>
+                /// Handles a `Receiver` error.
+                /// </summary>
+                /// <param name="src">The `AdHoc.BytesDst` (often a `Receiver.Framing` or `Receiver` itself) where the error occurred.</param>
+                /// <param name="error">The type of error.</param>
+                /// <param name="ex">An optional exception associated with the error.</param>
                 void error(AdHoc.BytesDst src, OnError error, Exception? ex = null);
             }
 
+            /// <summary>
+            /// The default error handler for `BytesSrc` related errors (currently only `OnError.OVERFLOW`).
+            /// </summary>
             public static OnErrorHandler_ error_handler_ = OnErrorHandler_.DEFAULT;
 
+            /// <summary>
+            /// Defines an interface for handling errors that occur in a `BytesSrc` context.
+            /// </summary>
             public interface OnErrorHandler_{
+                /// <summary>
+                /// A default `OnErrorHandler_` implementation that logs errors to the console.
+                /// </summary>
                 static OnErrorHandler_ DEFAULT = new ToConsole();
 
+                /// <summary>
+                /// A concrete `OnErrorHandler_` that writes error information to the console.
+                /// </summary>
                 class ToConsole : OnErrorHandler_{
+                    /// <summary>
+                    /// Handles a `BytesSrc` error by printing details to the console.
+                    /// </summary>
+                    /// <param name="src">The `AdHoc.BytesSrc` where the error occurred.</param>
+                    /// <param name="error">The type of error (currently, only `OnError.OVERFLOW` is relevant).</param>
+                    /// <param name="ex">An optional exception associated with the error.</param>
                     public void error(AdHoc.BytesSrc src, OnError error, Exception? ex = null)
                     {
                         switch( error )
@@ -332,18 +578,55 @@ namespace org.unirail{
                     }
                 }
 
+                /// <summary>
+                /// Handles a `BytesSrc` error.
+                /// </summary>
+                /// <param name="src">The `AdHoc.BytesSrc` where the error occurred.</param>
+                /// <param name="error">The type of error.</param>
+                /// <param name="ex">An optional exception associated with the error.</param>
                 void error(AdHoc.BytesSrc src, OnError error, Exception? ex = null);
             }
 
+            /// <summary>
+            /// Implements a framing decoder that handles a byte-oriented protocol with 0xFF as a frame start marker,
+            /// 0x7F-based escaping for 0x7F and 0xFF bytes within the payload, and a 2-byte CRC.
+            /// Frame format: 0xFF (start) + encoded_payload + 2_byte_CRC.
+            /// Special characters in payload:
+            /// - 0xFF is encoded.
+            /// - 0x7F is encoded.
+            /// It decodes incoming byte streams and passes complete, validated frames to an `upper_layer` Receiver.
+            /// </summary>
             public class Framing : AdHoc.BytesDst, EventsHandler{
-                public bool          isOpen() => upper_layer.isOpen();
-                public Receiver      upper_layer; //the upper layer external interface
-                public EventsHandler handler;     //interface to the upper layer internal consumer
+                public bool isOpen() => upper_layer.isOpen();
 
+                /// <summary>
+                /// The `Receiver` instance that will process the decoded frames from this framing layer.
+                /// </summary>
+                public Receiver upper_layer; // Provides external interface for decoded receiving data
+
+                /// <summary>
+                /// Handles events for decoded frames, typically forwarding them to the original handler of the `upper_layer` before it was hooked by this framing instance.
+                /// </summary>
+                public EventsHandler handler; // Handles decoded frame events for upper layer
+
+                /// <summary>
+                /// Atomically exchanges the current event handler with a new one.
+                /// </summary>
+                /// <param name="handler">The new event handler to set.</param>
+                /// <returns>The event handler that was previously set.</returns>
                 public EventsHandler exchange(EventsHandler handler) => Interlocked.Exchange(ref this.handler, handler);
 
+                /// <summary>
+                /// Initializes a new instance of the <see cref="Framing"/> class.
+                /// </summary>
+                /// <param name="upper_layer">The `Receiver` instance that will process the decoded frames.</param>
                 public Framing(Receiver upper_layer) => switch_to(upper_layer);
 
+                /// <summary>
+                /// Switches the framing layer to operate on a new `upper_layer` receiver.
+                /// This also resets the internal state of the framing decoder and hooks its event handling into the new `upper_layer`.
+                /// </summary>
+                /// <param name="upper_layer">The new `Receiver` instance to process decoded frames.</param>
                 public void switch_to(Receiver upper_layer)
                 {
                     reset();
@@ -357,6 +640,10 @@ namespace org.unirail{
                     handler = (this.upper_layer = upper_layer).exchange(this);
                 }
 
+                /// <summary>
+                /// Resets the framing decoder's state and reports an error.
+                /// </summary>
+                /// <param name="error">The type of error to report.</param>
                 private void error_reset(OnError error)
                 {
                     error_handler.error(this, error);
@@ -369,6 +656,10 @@ namespace org.unirail{
                     upper_layer.Close();
                 }
 
+                /// <summary>
+                /// Resets the internal state of the framing decoder, including CRC calculations, bit accumulators, and state machine.
+                /// This is called during initialization, when switching receivers, or upon encountering an unrecoverable error.
+                /// </summary>
                 private void reset()
                 {
                     bits                         = 0;
@@ -386,7 +677,8 @@ namespace org.unirail{
                 }
 
                 /**
-                 * write bytes
+                 * Writes raw bytes to the framing decoder for processing.
+                 * Decoded bytes are passed to the `upper_layer` Receiver.
                  * ATTENTION! The data in the provided buffer "src" may change due to buffer reuse.
                  */
                 public int Write(byte[] src, int src_byte, int src_bytes)
@@ -519,7 +811,8 @@ namespace org.unirail{
                             }
 
                             FF = true;
-                            if( state == State.SEEK_FF ) //can happence after any call of  put(src, dec_position++) that can  call >>> checkCrcThenDispatch >>> reset() so cleanup
+                            // Check if in SEEK_FF state (possible reset after error)
+                            if( state == State.SEEK_FF ) //can happen after any call of  put(src, dec_position++) that can  call >>> checkCrcThenDispatch >>> reset() so cleanup
                             {
                                 reset();
                                 state = State.NORMAL;
@@ -540,6 +833,12 @@ namespace org.unirail{
                     return src_bytes;
                 }
 
+                /// <summary>
+                /// Processes a single decoded byte from the bit accumulator, updates the CRC calculation,
+                /// and stores the decoded byte in the destination buffer.
+                /// </summary>
+                /// <param name="dst">The destination buffer where the decoded byte will be written (often the input buffer being reused).</param>
+                /// <param name="dst_index">The index in `dst` where the decoded byte should be written.</param>
                 private void put(byte[] dst, int dst_index)
                 {
                     crc3 = crc2; //shift crc history
@@ -565,6 +864,14 @@ namespace org.unirail{
                         getting_crc(src.get_byte());
                 }
 
+                /// <summary>
+                /// Writes a block of decoded bytes to the `upper_layer` Receiver.
+                /// Manages the state transition based on whether all bytes were written or if more are expected.
+                /// Also handles potential errors if a new frame marker (0xFF) is encountered prematurely.
+                /// </summary>
+                /// <param name="src">The buffer containing the decoded bytes.</param>
+                /// <param name="limit">The number of decoded bytes in `src` to be written.</param>
+                /// <param name="state_if_ok">The state to transition to if the write operation proceeds normally.</param>
                 private void write(byte[] src, int limit, State state_if_ok)
                 {
                     state = state_if_ok;
@@ -589,6 +896,14 @@ namespace org.unirail{
 
                 private bool dispatch_on_0;
 
+                /// <summary>
+                /// Processes incoming bytes that are part of the CRC checksum.
+                /// Once all CRC bytes are received, it verifies the CRC.
+                /// If valid, it dispatches the packet via `handler.onReceived`.
+                /// If invalid, it reports a CRC error and resets.
+                /// Supports a two-stage CRC check for certain distortion scenarios.
+                /// </summary>
+                /// <param name="crc_byte">The next byte of the CRC value being received from the stream.</param>
                 private void getting_crc(int crc_byte)
                 {
                     if( dispatch_on_0 )
@@ -620,37 +935,68 @@ namespace org.unirail{
                     reset();
                 }
 
-                private int    bits;
-                private int    shift;
-                private ushort pack_crc; //from packet crc
-                private ushort crc0;     //calculated crc history
-                private ushort crc1;
-                private ushort crc2;
-                private ushort crc3;
-                private int    pack_crc_byte;
-                private int    raw; //fix fetched byte
-                private int    dst_byte;
-                private bool   FF;
-                private State  state = State.SEEK_FF;
+                private int    bits;                  // Bit buffer for decoding 7F-escaped sequences.
+                private int    shift;                 // Current bit shift within the `bits` accumulator.
+                private ushort pack_crc;              // CRC value read from the incoming packet.
+                private ushort crc0;                  // Current calculated CRC of the payload.
+                private ushort crc1;                  // Previous CRC value (crc0 one step ago).
+                private ushort crc2;                  // CRC value before crc1 (crc0 two steps ago), used for final CRC check.
+                private ushort crc3;                  // CRC value before crc2, used for alternative CRC check.
+                private int    pack_crc_byte;         // Counter for bytes received for `pack_crc`.
+                private int    raw;                   // Last raw byte read from input stream.
+                private int    dst_byte;              // Index for writing decoded bytes if temporarily buffered.
+                private bool   FF;                    // Flag indicating if the last byte processed was 0xFF (frame marker).
+                private State  state = State.SEEK_FF; // Current state of the framing decoder.
 
+                /// <summary>
+                /// Defines the states for the framing decoder's state machine.
+                /// </summary>
                 private enum State{
-                    NORMAL  = 0,
-                    Ox7F    = 1,
-                    Ox7F_   = 2,
+                    /// <summary>Normal byte processing, expecting payload or 0x7F escape, or 0xFF frame marker.</summary>
+                    NORMAL = 0,
+
+                    /// <summary>A 0x7F byte was received; expecting the byte that follows it in the escape sequence.</summary>
+                    Ox7F = 1,
+
+                    /// <summary>Processing subsequent bytes in a multi-byte 0x7F escape sequence.</summary>
+                    Ox7F_ = 2,
+
+                    /// <summary>An error occurred or end of frame; seeking the next 0xFF frame start marker.</summary>
                     SEEK_FF = 3
                 }
             }
 
 #region Slot
+            /// <summary>
+            /// Internal class representing a slot in the receiver's processing chain, typically for nested messages.
+            /// It extends `Context.Receiver.Slot` and holds message-specific state.
+            /// </summary>
             internal class Slot : Context.Receiver.Slot{
+                /// <summary>
+                /// The `BytesDst` instance responsible for deserializing the current message or part of a message associated with this slot.
+                /// </summary>
                 public BytesDst dst;
 
+                /// <summary>
+                /// A bitmask indicating which fields of a message are null. Used by some deserialization schemes.
+                /// </summary>
                 public int fields_nulls;
+
+                /// <summary>
+                /// Gets the `BytesDst` instance from the `next` slot in the chain, cast to the specified type `DST`.
+                /// </summary>
+                /// <typeparam name="DST">The expected type of the `BytesDst` in the next slot.</typeparam>
+                /// <returns>The `BytesDst` from the next slot, cast to `DST`.</returns>
                 public DST get_bytes<DST>() => (DST)next.dst;
 
                 internal          Slot  next;
                 internal readonly Slot? prev;
 
+                /// <summary>
+                /// Initializes a new instance of the <see cref="Slot"/> class.
+                /// </summary>
+                /// <param name="dst">The `Receiver` associated with this slot chain.</param>
+                /// <param name="prev">The previous slot in the chain, or null if this is the root slot.</param>
                 public Slot(Receiver dst, Slot? prev) : base(dst)
                 {
                     this.prev = prev;
@@ -663,6 +1009,12 @@ namespace org.unirail{
             internal WeakReference<Slot> slot_ref;
 #endregion
 
+            /// <summary>
+            /// Reads a byte from the buffer and stores it as `fields_nulls` in the current slot.
+            /// This byte is typically a bitmask indicating null fields for a message.
+            /// </summary>
+            /// <param name="this_case">The state to set for retry if not enough bytes are available.</param>
+            /// <returns>True if the byte was read successfully; false if a retry is needed due to insufficient data.</returns>
             public bool get_fields_nulls(uint this_case)
             {
                 if( byte_ < byte_max )
@@ -676,8 +1028,19 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Checks if a specific field is marked as null based on the `fields_nulls` bitmask in the current slot.
+            /// </summary>
+            /// <param name="field">The bit representing the field to check (e.g., a power of 2).</param>
+            /// <returns>True if the field's corresponding bit is NOT set in `fields_nulls` (meaning it is null, by convention where 0 means null); false otherwise.</returns>
             public bool is_null(int field) => (slot!.fields_nulls & field) == 0;
 
+            /// <summary>
+            /// Reads a byte. If the byte is 0 (null indicator), returns false.
+            /// Otherwise, updates `u8_` by ORing the byte value shifted by `shift`, sets `u8` to this new `u8_` value, and returns true.
+            /// </summary>
+            /// <param name="shift">The number of bits to left-shift the byte value before ORing with `u8_`.</param>
+            /// <returns>False if the read byte is 0; true otherwise.</returns>
             public bool byte_nulls(byte shift)
             {
                 u4 = get_byte();
@@ -687,6 +1050,13 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Reads a byte. If the byte is 0 (null indicator), returns false.
+            /// Otherwise, `null_value` is ORed into `u8_`, `u8` is updated to this new `u8_` value, and the method returns true.
+            /// This is used when a non-zero byte indicates presence, and `null_value` itself carries the presence flag for `u8_`.
+            /// </summary>
+            /// <param name="null_value">The value to OR into `u8_` if the read byte is not 0.</param>
+            /// <returns>False if the read byte is 0; true otherwise.</returns>
             public bool byte_nulls(ulong null_value)
             {
                 u4 = get_byte();
@@ -697,6 +1067,15 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Reads a byte. If the byte is 0 (null indicator), returns false.
+            /// Otherwise, if the byte is 0xFF, `null_value` is ORed into `u8_`.
+            /// If the byte is neither 0 nor 0xFF, the byte value (shifted by `shift`) is ORed into `u8_`.
+            /// In either non-zero case, `u8` is updated to the new `u8_` value, and the method returns true.
+            /// </summary>
+            /// <param name="shift">The number of bits to left-shift the byte value if it's not 0 or 0xFF.</param>
+            /// <param name="null_value">The value to OR into `u8_` if the read byte is 0xFF.</param>
+            /// <returns>False if the read byte is 0; true otherwise.</returns>
             public bool byte_nulls(byte shift, ulong null_value)
             {
                 u4 = get_byte();
@@ -709,8 +1088,17 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Checks if the receiver is currently idle, meaning it's not in the middle of processing a packet.
+            /// </summary>
+            /// <returns>True if the receiver is idle (current slot is null); false otherwise.</returns>
             public bool idle() => slot == null;
 
+            /// <summary>
+            /// Attempts to read up to 4 bytes into `u4`. If fewer than `bytes_left` bytes are available,
+            /// it reads what's available, updates `u4` partially, and decrements `bytes_left`.
+            /// </summary>
+            /// <returns>True if more bytes are still needed to complete the 4-byte read (i.e., `bytes_left` was not fully satisfied); false if 4 bytes (or the original `bytes_left` requirement) have been read into `u4`.</returns>
             bool not_get4()
             {
                 if( remaining < bytes_left )
@@ -725,13 +1113,23 @@ namespace org.unirail{
                 return false;
             }
 
-            public abstract BytesDst Allocate(int  id); //throws Exception if wrong id
+            /// <summary>
+            /// Abstract method to obtain a `BytesDst` handler suitable for deserializing a packet of the given `id`.
+            /// This method is called after a packet ID has been read from the stream.
+            /// </summary>
+            /// <param name="id">The packet identifier.</param>
+            /// <returns>A `BytesDst` instance capable of deserializing the identified packet type.</returns>
+            /// <exception cref="Exception">Typically thrown if the `id` is unknown or invalid.</exception>
             public abstract BytesDst Receiving(int id); //throws Exception if wrong id
 
             public bool isOpen() => slot != null;
 
             public virtual void Close() => Reset();
 
+            /// <summary>
+            /// Resets the receiver's internal state, including clearing any active slots, buffers,
+            /// and resetting processing modes. This prepares the receiver for a new connection or packet.
+            /// </summary>
             protected void Reset()
             {
                 if( slot == null )
@@ -756,8 +1154,10 @@ namespace org.unirail{
             }
 
             /**
-             * write bytes
-             * ATTENTION! The data in the provided buffer "src" may change due to buffer reuse.
+             * Writes raw bytes from `src` to this receiver for processing.
+             * This method drives the deserialization process, identifying packet types,
+             * and invoking message-specific deserialization logic via `BytesDst` handlers.
+             * ATTENTION! The data in the provided buffer `src` may be modified after this call due to buffer reuse.
              */
             public int Write(byte[] src, int src_byte, int src_bytes)
             {
@@ -892,6 +1292,13 @@ namespace org.unirail{
                 return byte_ - src_byte;
             }
 
+            /// <summary>
+            /// Gets the `BytesDst` instance for the current slot and invokes its `__put_bytes` method
+            /// to continue deserialization of the current message.
+            /// </summary>
+            /// <typeparam name="DST">The expected type of the `BytesDst` handler.</typeparam>
+            /// <param name="dst">The `BytesDst` instance, typically pre-allocated for the message type.</param>
+            /// <returns>The `dst` instance after `__put_bytes` has been called.</returns>
             public DST get_bytes<DST>(DST dst)
                 where DST : BytesDst
             {
@@ -900,8 +1307,17 @@ namespace org.unirail{
                 return dst;
             }
 
+            /// <summary>
+            /// Attempts to get the `BytesDst` handler for a nested message.
+            /// If successful (enough data for the nested message part), it processes it and returns the handler.
+            /// If not enough data, sets the receiver to retry at `next_case` and returns null.
+            /// </summary>
+            /// <typeparam name="DST">The type of the `BytesDst` handler for the nested message.</typeparam>
+            /// <param name="dst">The `BytesDst` instance for the nested message.</param>
+            /// <param name="next_case">The state to set for retry if processing the nested message requires more data.</param>
+            /// <returns>The `dst` instance if processing was successful (or initiated successfully); null if a retry is needed.</returns>
             public DST? try_get_bytes<DST>(DST dst, uint next_case)
-                where DST : class ?, BytesDst
+                where DST : class?, BytesDst
             {
                 var s = slot!;
 
@@ -919,6 +1335,11 @@ namespace org.unirail{
                 return null;
             }
 
+            /// <summary>
+            /// Sets the receiver's current processing mode to `RETRY` and records `the_case` as the state
+            /// to resume from when more data is available.
+            /// </summary>
+            /// <param name="the_case">The specific state or step in the deserialization logic to resume at.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void retry_at(uint the_case)
             {
@@ -926,6 +1347,12 @@ namespace org.unirail{
                 mode        = RETRY;
             }
 
+            /// <summary>
+            /// Checks if there are any bytes remaining in the current buffer segment (`byte_ < byte_max`).
+            /// If not, sets the receiver to retry mode at `next_case`.
+            /// </summary>
+            /// <param name="next_case">The state to set for retry if no bytes are remaining.</param>
+            /// <returns>True if bytes are remaining; false if no bytes are remaining and retry mode is set.</returns>
             public bool has_bytes(uint next_case)
             {
                 if( byte_ < byte_max )
@@ -935,17 +1362,74 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Checks if at least 1 byte is available in the buffer. If not, sets up a retry to get 1 byte
+            /// (as part of a 4-byte read attempt for efficiency) and transitions to `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to transition to if a retry is needed.</param>
+            /// <returns>True if at least 1 byte is immediately available or if the retry mechanism is successfully initiated; effectively, true if processing can continue or will be retried for this byte.</returns>
             public bool has_1bytes(uint get_case) => 0 < byte_max - byte_ || retry_get4(1, get_case);
 
-            public sbyte get_sbyte_() => (sbyte)u4;
-            public sbyte get_sbyte()  => (sbyte)buffer![byte_++];
-            public byte  get_byte_()  => (byte)u4;
-            public byte  get_byte()   => buffer![byte_++];
+            /// <summary>
+            /// Gets the boolean value stored in the temporary `u4` buffer (1 for true, 0 for false).
+            /// Assumes `u4` was populated by a previous read operation (e.g., `try_get4`).
+            /// </summary>
+            /// <returns>The boolean value from `u4`.</returns>
+            public bool get_bool_() => u4 == 1;
 
+            /// <summary>
+            /// Reads a single byte from the buffer and interprets it as a boolean (1 for true, 0 for false).
+            /// Advances the buffer position.
+            /// </summary>
+            /// <returns>The boolean value.</returns>
+            public bool get_bool() => buffer![byte_++] == 1;
+
+            /// <summary>
+            /// Gets the signed byte value stored in the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The signed byte value from `u4`.</returns>
+            public sbyte get_sbyte_() => (sbyte)u4;
+
+            /// <summary>
+            /// Reads a single signed byte from the buffer. Advances the buffer position.
+            /// </summary>
+            /// <returns>The signed byte value.</returns>
+            public sbyte get_sbyte() => (sbyte)buffer![byte_++];
+
+            /// <summary>
+            /// Gets the unsigned byte value stored in the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The unsigned byte value from `u4`.</returns>
+            public byte get_byte_() => (byte)u4;
+
+            /// <summary>
+            /// Reads a single unsigned byte from the buffer. Advances the buffer position.
+            /// </summary>
+            /// <returns>The unsigned byte value.</returns>
+            public byte get_byte() => buffer![byte_++];
+
+            /// <summary>
+            /// Checks if at least 2 bytes are available in the buffer. If not, sets up a retry to get 2 bytes
+            /// (as part of a 4-byte read attempt) and transitions to `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to transition to if a retry is needed.</param>
+            /// <returns>True if at least 2 bytes are immediately available or if the retry is initiated.</returns>
             public bool has_2bytes(uint get_case) => 1 < byte_max - byte_ || retry_get4(2, get_case);
 
+            /// <summary>
+            /// Gets the short (Int16) value stored in the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The short value from `u4`.</returns>
             public short get_short_() => (short)u4;
 
+            /// <summary>
+            /// Reads a 2-byte short (Int16) value from the buffer using appropriate endianness.
+            /// Advances the buffer position by 2 bytes.
+            /// </summary>
+            /// <returns>The short value.</returns>
             public short get_short()
             {
                 var ret = Endianness.OK.Int16(buffer!, byte_);
@@ -953,8 +1437,18 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Gets the unsigned short (UInt16) value stored in the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The unsigned short value from `u4`.</returns>
             public ushort get_ushort_() => (ushort)u4;
 
+            /// <summary>
+            /// Reads a 2-byte unsigned short (UInt16) value from the buffer using appropriate endianness.
+            /// Advances the buffer position by 2 bytes.
+            /// </summary>
+            /// <returns>The unsigned short value.</returns>
             public ushort get_ushort()
             {
                 var ret = Endianness.OK.UInt16(buffer!, byte_);
@@ -962,10 +1456,26 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Checks if at least 4 bytes are available in the buffer. If not, sets up a retry to get 4 bytes
+            /// and transitions to `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to transition to if a retry is needed.</param>
+            /// <returns>True if at least 4 bytes are immediately available or if the retry is initiated.</returns>
             public bool has_4bytes(uint get_case) => 3 < byte_max - byte_ || retry_get4(4, get_case);
 
+            /// <summary>
+            /// Gets the integer (Int32) value stored in the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The integer value from `u4`.</returns>
             public int get_int_() => (int)u4;
 
+            /// <summary>
+            /// Reads a 4-byte integer (Int32) value from the buffer using appropriate endianness.
+            /// Advances the buffer position by 4 bytes.
+            /// </summary>
+            /// <returns>The integer value.</returns>
             public int get_int()
             {
                 var ret = Endianness.OK.Int32(buffer!, byte_);
@@ -973,8 +1483,18 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Gets the unsigned integer (UInt32) value stored in the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The unsigned integer value from `u4`.</returns>
             public uint get_uint_() => u4;
 
+            /// <summary>
+            /// Reads a 4-byte unsigned integer (UInt32) value from the buffer using appropriate endianness.
+            /// Advances the buffer position by 4 bytes.
+            /// </summary>
+            /// <returns>The unsigned integer value.</returns>
             public uint get_uint()
             {
                 var ret = Endianness.OK.UInt32(buffer!, byte_);
@@ -982,10 +1502,26 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Checks if at least 8 bytes are available in the buffer. If not, sets up a retry to get 8 bytes
+            /// and transitions to `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to transition to if a retry is needed.</param>
+            /// <returns>True if at least 8 bytes are immediately available or if the retry is initiated.</returns>
             public bool has_8bytes(uint get_case) => 7 < byte_max - byte_ || retry_get8(8, get_case);
 
+            /// <summary>
+            /// Gets the long (Int64) value stored in the temporary `u8` buffer.
+            /// Assumes `u8` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The long value from `u8`.</returns>
             public long get_long_() => (long)u8;
 
+            /// <summary>
+            /// Reads an 8-byte long (Int64) value from the buffer using appropriate endianness.
+            /// Advances the buffer position by 8 bytes.
+            /// </summary>
+            /// <returns>The long value.</returns>
             public long get_long()
             {
                 var ret = Endianness.OK.Int64(buffer!, byte_);
@@ -993,8 +1529,18 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Gets the unsigned long (UInt64) value stored in the temporary `u8` buffer.
+            /// Assumes `u8` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The unsigned long value from `u8`.</returns>
             public ulong get_ulong_() => u8;
 
+            /// <summary>
+            /// Reads an 8-byte unsigned long (UInt64) value from the buffer using appropriate endianness.
+            /// Advances the buffer position by 8 bytes.
+            /// </summary>
+            /// <returns>The unsigned long value.</returns>
             public ulong get_ulong()
             {
                 var ret = Endianness.OK.UInt64(buffer!, byte_);
@@ -1002,6 +1548,12 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Reads an 8-byte double-precision floating-point value from the buffer.
+            /// The bytes are interpreted as UInt64 (respecting endianness) and then converted to double.
+            /// Advances the buffer position by 8 bytes.
+            /// </summary>
+            /// <returns>The double value.</returns>
             public double get_double()
             {
                 var ret = BitConverter.UInt64BitsToDouble(Endianness.OK.UInt64(buffer!, byte_));
@@ -1009,8 +1561,19 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Gets the double value by reinterpreting the bits of the temporary `u8` buffer.
+            /// Assumes `u8` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The double value from `u8`.</returns>
             public double get_double_() => BitConverter.UInt64BitsToDouble(u8);
 
+            /// <summary>
+            /// Reads a 4-byte single-precision floating-point value from the buffer.
+            /// The bytes are interpreted as UInt32 (respecting endianness) and then converted to float.
+            /// Advances the buffer position by 4 bytes.
+            /// </summary>
+            /// <returns>The float value.</returns>
             public float get_float()
             {
                 var ret = BitConverter.UInt32BitsToSingle(Endianness.OK.UInt32(buffer!, byte_));
@@ -1018,8 +1581,20 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Gets the float value by reinterpreting the bits of the temporary `u4` buffer.
+            /// Assumes `u4` was populated by a previous read operation.
+            /// </summary>
+            /// <returns>The float value from `u4`.</returns>
             public float get_float_() => BitConverter.UInt32BitsToSingle(u4);
+
 #region get_into_u8
+            /// <summary>
+            /// Attempts to read a signed byte from the buffer and store its sign-extended value in `u8`.
+            /// If not enough data, sets up a retry for 1 byte (read as INT1 type) at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the signed byte was read and stored successfully; false if a retry is needed.</returns>
             public bool get_sbyte_u8(uint get_case)
             {
                 if( 0 < byte_max - byte_ )
@@ -1033,6 +1608,12 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Attempts to read an unsigned byte from the buffer and store its value in `u8`.
+            /// If not enough data, sets up a retry for 1 byte at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the byte was read and stored successfully; false if a retry is needed.</returns>
             public bool get_byte_u8(uint get_case)
             {
                 if( byte_max - byte_ == 0 )
@@ -1041,6 +1622,12 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Attempts to read a short (Int16) from the buffer and store its sign-extended value in `u8`.
+            /// If not enough data, sets up a retry for 2 bytes (read as INT2 type) at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the short was read and stored successfully; false if a retry is needed.</returns>
             public bool get_short_u8(uint get_case)
             {
                 if( 1 < byte_max - byte_ )
@@ -1055,6 +1642,12 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Attempts to read an unsigned short (UInt16) from the buffer and store its value in `u8`.
+            /// If not enough data, sets up a retry for 2 bytes at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the unsigned short was read and stored successfully; false if a retry is needed.</returns>
             public bool get_ushort_u8(uint get_case)
             {
                 if( byte_max - byte_ < 2 )
@@ -1064,6 +1657,12 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Attempts to read an integer (Int32) from the buffer and store its sign-extended value in `u8`.
+            /// If not enough data, sets up a retry for 4 bytes (read as INT4 type) at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the integer was read and stored successfully; false if a retry is needed.</returns>
             public bool get_int_u8(uint get_case)
             {
                 if( 3 < byte_max - byte_ )
@@ -1078,6 +1677,12 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Attempts to read an unsigned integer (UInt32) from the buffer and store its value in `u8`.
+            /// If not enough data, sets up a retry for 4 bytes at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the unsigned integer was read and stored successfully; false if a retry is needed.</returns>
             public bool get_uint_u8(uint get_case)
             {
                 if( byte_max - byte_ < 4 )
@@ -1087,6 +1692,12 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Attempts to read a long (Int64) from the buffer and store its value in `u8`.
+            /// If not enough data, sets up a retry for 8 bytes at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the long was read and stored successfully; false if a retry is needed.</returns>
             public bool get_long_u8(uint get_case)
             {
                 if( byte_max - byte_ < 8 )
@@ -1096,6 +1707,12 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Attempts to read an unsigned long (UInt64) from the buffer and store its value in `u8`.
+            /// If not enough data, sets up a retry for 8 bytes at `get_case`.
+            /// </summary>
+            /// <param name="get_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the unsigned long was read and stored successfully; false if a retry is needed.</returns>
             public bool get_ulong_u8(uint get_case)
             {
                 if( byte_max - byte_ < 8 )
@@ -1106,6 +1723,13 @@ namespace org.unirail{
             }
 #endregion
 #region 8
+            /// <summary>
+            /// Attempts to read a specified number of bytes (up to 8) from the buffer into `u8`.
+            /// If fewer than `bytes` are available, sets up a retry for the required number of bytes at `get8_case`.
+            /// </summary>
+            /// <param name="bytes">The number of bytes to read (1 to 8).</param>
+            /// <param name="get8_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the bytes were read successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool try_get8(int bytes, uint get8_case)
             {
@@ -1115,6 +1739,14 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Sets up a retry operation to read a specified number of bytes (up to 8) into `u8`.
+            /// It reads any currently available bytes, stores them partially in `u8`,
+            /// and sets the mode to `VAL8` and state to `get8_case` for continuation.
+            /// </summary>
+            /// <param name="bytes">The total number of bytes that need to be read (1 to 8).</param>
+            /// <param name="get8_case">The state to resume at when more data is available.</param>
+            /// <returns>Always false, indicating that a retry is required.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool retry_get8(int bytes, uint get8_case)
             {
@@ -1125,6 +1757,14 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Reads a specified number of bytes (up to 8) from the buffer and returns them as type `T`.
+            /// The bytes are combined into a `ulong` respecting endianness, then reinterpreted as `T`.
+            /// Advances the buffer position by `bytes`.
+            /// </summary>
+            /// <typeparam name="T">The target type (must be compatible with an 8-byte representation if `bytes` is large).</typeparam>
+            /// <param name="bytes">The number of bytes to read (1 to 8).</param>
+            /// <returns>The value of type `T` read from the buffer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public T get8<T>(int bytes)
             {
@@ -1167,8 +1807,21 @@ namespace org.unirail{
             }
 #endregion
 #region 4
+            /// <summary>
+            /// Attempts to read the number of bytes currently specified by `bytes_left` (assumed to be up to 4) from the buffer into `u4`.
+            /// If insufficient bytes are available, sets up a retry at `next_case`.
+            /// </summary>
+            /// <param name="next_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the bytes were read successfully; false if a retry is needed.</returns>
             public bool try_get4(uint next_case) => try_get4(bytes_left, next_case);
 
+            /// <summary>
+            /// Attempts to read a specified number of bytes (up to 4) from the buffer into `u4`.
+            /// If fewer than `bytes` are available, sets up a retry for the required number of bytes at `next_case`.
+            /// </summary>
+            /// <param name="bytes">The number of bytes to read (1 to 4).</param>
+            /// <param name="next_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the bytes were read successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool try_get4(int bytes, uint next_case)
             {
@@ -1178,6 +1831,14 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Sets up a retry operation to read a specified number of bytes (up to 4) into `u4`.
+            /// It reads any currently available bytes, stores them partially in `u4`,
+            /// and sets the mode to `VAL4` and state to `get4_case` for continuation.
+            /// </summary>
+            /// <param name="bytes">The total number of bytes that need to be read (1 to 4).</param>
+            /// <param name="get4_case">The state to resume at when more data is available.</param>
+            /// <returns>Always false, indicating that a retry is required.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool retry_get4(int bytes, uint get4_case)
             {
@@ -1188,9 +1849,23 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Gets the value currently stored in the `u4` buffer, reinterpreted as type `T`.
+            /// This is an unsafe cast and assumes `T` is compatible with a 4-byte representation.
+            /// </summary>
+            /// <typeparam name="T">The type to reinterpret the `u4` buffer as.</typeparam>
+            /// <returns>The value from `u4` cast to type `T`.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public T get4<T>() => Unsafe.As<uint, T>(ref u4);
 
+            /// <summary>
+            /// Reads a specified number of bytes (up to 4) from the buffer and returns them as type `T`.
+            /// The bytes are combined into a `uint` respecting endianness, then reinterpreted as `T`.
+            /// Advances the buffer position by `bytes`.
+            /// </summary>
+            /// <typeparam name="T">The target type (must be compatible with a 4-byte representation if `bytes` is large).</typeparam>
+            /// <param name="bytes">The number of bytes to read (1 to 4).</param>
+            /// <returns>The value of type `T` read from the buffer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public T get4<T>(int bytes)
             {
@@ -1217,6 +1892,9 @@ namespace org.unirail{
             }
 #endregion
 #region bits
+            /// <summary>
+            /// Initializes the state for bitwise reading operations. Resets `bits` accumulator and `bit` pointer.
+            /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void init_bits()
             {
@@ -1224,9 +1902,21 @@ namespace org.unirail{
                 bit  = 8;
             }
 
+            /// <summary>
+            /// Gets the value currently stored in `u4` (populated by `try_get_bits`), reinterpreted as type `T`.
+            /// </summary>
+            /// <typeparam name="T">The type to reinterpret `u4` as.</typeparam>
+            /// <returns>The bits value from `u4` cast to type `T`.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public T get_bits<T>() => Unsafe.As<uint, T>(ref u4);
 
+            /// <summary>
+            /// Reads a specified number of bits from the buffer, potentially consuming one or more bytes.
+            /// Bits are read from the internal `bits` accumulator; if more bits are needed, a byte is read from `buffer`.
+            /// </summary>
+            /// <typeparam name="T">The type to return the bits as (e.g., int, byte). The value is stored in the lower bits of `T`.</typeparam>
+            /// <param name="len_bits">The number of bits to read (must be less than or equal to the bit-width of `T` and typically small, e.g., 1-8).</param>
+            /// <returns>The bits read from the buffer, cast to type `T`.</returns>
             public T get_bits<T>(int len_bits)
             {
                 uint ret;
@@ -1244,6 +1934,14 @@ namespace org.unirail{
                 return Unsafe.As<uint, T>(ref ret);
             }
 
+            /// <summary>
+            /// Attempts to read a specified number of bits from the buffer into `u4`.
+            /// If not enough data (bytes) is available in the buffer to satisfy the bit read,
+            /// sets up a retry at `this_case`.
+            /// </summary>
+            /// <param name="len_bits">The number of bits to read.</param>
+            /// <param name="this_case">The state to retry at if reading fails due to insufficient underlying bytes.</param>
+            /// <returns>True if the bits were read successfully into `u4`; false if a retry is needed.</returns>
             public bool try_get_bits(int len_bits, uint this_case)
             {
                 if( bit + len_bits < 9 )
@@ -1266,8 +1964,21 @@ namespace org.unirail{
             }
 #endregion
 #region varint
+            /// <summary>
+            /// Attempts to read `bytes_left` (assumed to be up to 8) from the buffer into `u8` for varint processing.
+            /// If insufficient bytes, sets up a retry. This is a specialized version of `try_get8` for varint contexts.
+            /// </summary>
+            /// <param name="next_case">The state to retry at if reading fails.</param>
+            /// <returns>True if bytes were read successfully; false if a retry is needed.</returns>
             public bool try_get8(uint next_case) => try_get8(bytes_left, next_case);
 
+            /// <summary>
+            /// Tries to read 1 bit for varint length information (0 for 1 byte, 1 for 2 bytes).
+            /// Sets `bytes_left` and `bytes_max` according to this length.
+            /// </summary>
+            /// <param name="bits">Number of bits for length info (should be 1 for this method).</param>
+            /// <param name="this_case">The state to retry at if reading bits fails.</param>
+            /// <returns>True if length bit was read and `bytes_left` set; false if retry is needed.</returns>
             public bool try_get_varint_bits1(int bits, uint this_case)
             {
                 if( !try_get_bits(bits, this_case) )
@@ -1276,6 +1987,13 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Tries to read a specified number of bits for varint length information.
+            /// Sets `bytes_left` and `bytes_max` according to this length.
+            /// </summary>
+            /// <param name="bits">Number of bits for length info.</param>
+            /// <param name="this_case">The state to retry at if reading bits fails.</param>
+            /// <returns>True if length bits were read and `bytes_left` set; false if retry is needed.</returns>
             public bool try_get_varint_bits(int bits, uint this_case)
             {
                 if( !try_get_bits(bits, this_case) )
@@ -1284,6 +2002,12 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Attempts to read a varint-encoded unsigned long from the buffer into `u8`.
+            /// If not enough data, sets mode to `VARINT` and state to `next_case` for retry.
+            /// </summary>
+            /// <param name="next_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the varint was read successfully; false if a retry is needed.</returns>
             public bool try_get_varint(uint next_case)
             {
                 u8         = 0;
@@ -1297,6 +2021,11 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Reads a varint-encoded unsigned long from the `buffer` and accumulates it into `u8`.
+            /// Updates `byte_` (buffer position) and `bytes_left` (varint shift accumulator).
+            /// </summary>
+            /// <returns>True if a complete varint value has been read; false if more bytes are needed from the buffer.</returns>
             private bool varint()
             {
                 for( ulong b; byte_ < byte_max; u8 |= (b & 0x7FUL) << bytes_left, bytes_left += 7 )
@@ -1309,11 +2038,23 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Decodes a ZigZag-encoded unsigned long back to a signed long.
+            /// ZigZag encoding maps signed integers to unsigned integers so that numbers with a small absolute value
+            /// (i.e., close to zero, positive or negative) have a small varint encoded value.
+            /// </summary>
+            /// <param name="src">The ZigZag-encoded unsigned long value.</param>
+            /// <returns>The decoded signed long value.</returns>
             public static long zig_zag(ulong src) => -(long)(src & 1) ^ (long)(src >> 1);
 #endregion
 #region dims
             private int[] dims = Array.Empty<int>(); //temporary buffer for the receiving string and more
 
+            /// <summary>
+            /// Initializes or resizes the internal `dims` array used for storing dimensions of multi-dimensional data.
+            /// Also resets `u8` to 1 (often used as a running product of dimensions).
+            /// </summary>
+            /// <param name="size">The required size of the dimensions array.</param>
             public void init_dims(int size)
             {
                 u8 = 1;
@@ -1323,8 +2064,20 @@ namespace org.unirail{
                 dims = ArrayPool<int>.Shared.Rent(size);
             }
 
+            /// <summary>
+            /// Gets a dimension value from the internal `dims` array at the specified index.
+            /// </summary>
+            /// <param name="index">The index of the dimension to retrieve.</param>
+            /// <returns>The dimension value stored at `dims[index]`.</returns>
             public int dim(int index) => dims[index];
 
+            /// <summary>
+            /// Reads a 4-byte integer from the buffer, validates it against `max`, stores it in `dims[index]`,
+            /// and multiplies it into `u8` (which typically accumulates the total number of elements).
+            /// Reports an overflow error if `dim > max`.
+            /// </summary>
+            /// <param name="max">The maximum allowed value for this dimension.</param>
+            /// <param name="index">The index in the `dims` array where this dimension should be stored.</param>
             public void dim(int max, int index)
             {
                 var dim = get4<int>();
@@ -1335,6 +2088,12 @@ namespace org.unirail{
                 dims[index] =  dim;
             }
 
+            /// <summary>
+            /// Reads a 4-byte integer from the buffer representing a length, and validates it against `max`.
+            /// Reports an overflow error if `len > max`. If an overflow occurs, `u8` (often total elements) is set to 0.
+            /// </summary>
+            /// <param name="max">The maximum allowed value for this length.</param>
+            /// <returns>The read length if it's within the `max` limit; otherwise, 0 if an overflow occurred.</returns>
             public int length(long max)
             {
                 var len = get4<int>();
@@ -1347,6 +2106,11 @@ namespace org.unirail{
             }
 #endregion
 #region string
+            /// <summary>
+            /// Gets the string value currently stored in the `str` field and then clears `str` to null.
+            /// Assumes `str` was populated by a previous string deserialization operation.
+            /// </summary>
+            /// <returns>The string value from the `str` field, or null if `str` was already null.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public string? get_string()
             {
@@ -1355,6 +2119,14 @@ namespace org.unirail{
                 return ret;
             }
 
+            /// <summary>
+            /// Attempts to read a varint-encoded string from the buffer. The string consists of a varint-encoded length
+            /// followed by varint-encoded characters.
+            /// If not enough data, sets mode to `STR` and state to `get_string_case` for retry.
+            /// </summary>
+            /// <param name="max_chars">The maximum number of characters allowed for the string. An overflow error is reported if the decoded length exceeds this.</param>
+            /// <param name="get_string_case">The state to retry at if reading fails.</param>
+            /// <returns>True if the string was read successfully and stored in `str`; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool try_get_string(uint max_chars, int get_string_case)
             {
@@ -1374,6 +2146,11 @@ namespace org.unirail{
 
             private char[]? chs;
 
+            /// <summary>
+            /// Checks if the decoded string length (`u8`) is within the `u4` (max_chars) limit.
+            /// Allocates or reuses `chs` character buffer. Then proceeds to read characters via `getting_string()`.
+            /// </summary>
+            /// <returns>True if length check passes and `getting_string()` returns true; false otherwise (e.g., overflow or incomplete character read).</returns>
             private bool check_length_and_getting_string()
             {
                 if( u4 < u8 )
@@ -1392,6 +2169,11 @@ namespace org.unirail{
                 return getting_string();
             }
 
+            /// <summary>
+            /// Reads varint-encoded characters from the buffer and populates the `chs` array up to the length stored in `u8_`.
+            /// Updates `u4` as the character index. If all characters are read, constructs `str`.
+            /// </summary>
+            /// <returns>True if the complete string has been read and `str` is set; false if more bytes are needed for characters.</returns>
             private bool getting_string()
             {
                 while( u4 < u8_ )
@@ -1428,21 +2210,68 @@ namespace org.unirail{
             }
         }
 
+        /// <summary>
+        /// Abstract base class for data transmitters. It manages the state for serializing
+        /// structured data to a byte stream. It extends `Context.Transmitter` and implements `BytesSrc`
+        /// (to provide the serialized bytes).
+        /// </summary>
         public abstract class Transmitter : Context.Transmitter, BytesSrc{
+            /// <summary>
+            /// Internal interface used by `Transmitter` to interact with message-specific serialization logic.
+            /// </summary>
             public interface BytesSrc{
+                /// <summary>
+                /// Internal method called by the `Transmitter` to serialize data for a specific message type.
+                /// Implementers should write to the `Transmitter`'s buffer using its `put_` methods.
+                /// </summary>
+                /// <param name="dst">The `Transmitter` instance providing the byte stream and serialization context.</param>
+                /// <returns>True if the message part was successfully serialized with available buffer space; false if more buffer space is needed or processing is otherwise incomplete.</returns>
                 bool __get_bytes(Transmitter dst);
-                int  __id { get; }
+
+                /// <summary>
+                /// Gets the unique identifier for this message type or data structure.
+                /// </summary>
+                int __id { get; }
             }
 
+            /// <summary>
+            /// Defines an interface for handling events generated by a `Transmitter`.
+            /// </summary>
             public interface EventsHandler{
+                /// <summary>
+                /// Called just before a packet's serialization process begins via its `BytesSrc` handler.
+                /// </summary>
+                /// <param name="dst">The `Transmitter` instance that is about to send the packet.</param>
+                /// <param name="src">The `BytesSrc` instance representing the packet to be serialized.</param>
                 void onSending(Transmitter dst, BytesSrc src) { }
 
+                /// <summary>
+                /// Called after a complete packet has been successfully serialized and (notionally) sent
+                /// from the internal perspective of the `Transmitter`'s processing loop.
+                /// The actual transmission to an external sink depends on the `Transmitter.Read` method being called.
+                /// </summary>
+                /// <param name="dst">The `Transmitter` instance that has completed sending the packet.</param>
+                /// <param name="src">The `BytesSrc` instance representing the packet that was sent.</param>
                 void onSent(Transmitter dst, BytesSrc src) { }
             }
 
+            /// <summary>
+            /// The current event handler for this transmitter.
+            /// </summary>
             protected EventsHandler handler;
-            public    EventsHandler exchange(EventsHandler handler) => Interlocked.Exchange(ref this.handler, handler);
 
+            /// <summary>
+            /// Atomically exchanges the current event handler with a new one.
+            /// </summary>
+            /// <param name="handler">The new event handler to set.</param>
+            /// <returns>The event handler that was previously set.</returns>
+            public EventsHandler exchange(EventsHandler handler) => Interlocked.Exchange(ref this.handler, handler);
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="Transmitter"/> class.
+            /// </summary>
+            /// <param name="handler">The event handler for transmitter events.</param>
+            /// <param name="power_of_2_sending_queue_size">The size of the internal sending queues, expressed as a power of 2 (e.g., 5 for a size of 2^5=32). Default is 5.</param>
             public Transmitter(EventsHandler handler, int power_of_2_sending_queue_size = 5)
             {
                 this.handler  = handler;
@@ -1462,10 +2291,25 @@ namespace org.unirail{
             }
 
 #region sending
-            public readonly  RingBuffer<BytesSrc> sending_;
-            public readonly  RingBuffer<ulong>    sending_value;
-            private volatile int                  Lock;
+            /// <summary>
+            /// Ring buffer queue for `BytesSrc` instances awaiting serialization.
+            /// </summary>
+            public readonly RingBuffer<BytesSrc> sending_;
 
+            /// <summary>
+            /// Ring buffer queue for optional `ulong` values associated with packets in `sending_`.
+            /// Used by some protocols to pass auxiliary data alongside packets.
+            /// </summary>
+            public readonly RingBuffer<ulong> sending_value;
+
+            private volatile int Lock;
+
+            /// <summary>
+            /// Enqueues a `BytesSrc` instance for serialization and subsequent transmission.
+            /// Notifies any subscribed listener if data is added.
+            /// </summary>
+            /// <param name="src">The `BytesSrc` instance representing the packet to send.</param>
+            /// <returns>True if the `BytesSrc` was successfully enqueued; false if the queue is full.</returns>
             public bool send(BytesSrc src)
             {
                 while( Interlocked.CompareExchange(ref Lock, 1, 0) != 0 )
@@ -1481,6 +2325,13 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Enqueues a `BytesSrc` instance and an associated `ulong` packet value for serialization and transmission.
+            /// Notifies any subscribed listener if data is added.
+            /// </summary>
+            /// <param name="src">The `BytesSrc` instance representing the packet to send.</param>
+            /// <param name="pack">An auxiliary `ulong` value associated with the packet.</param>
+            /// <returns>True if the `BytesSrc` and packet value were successfully enqueued; false if the queues are full.</returns>
             public bool send(BytesSrc src, ulong pack)
             {
                 while( Interlocked.CompareExchange(ref Lock, 1, 0) != 0 )
@@ -1499,26 +2350,59 @@ namespace org.unirail{
             }
 #endregion
 #region value_pack transfer
+            /// <summary>
+            /// Dequeues a `ulong` value from the `sending_value` queue and stores it in the `u8` field.
+            /// This is used by message-specific serializers to retrieve auxiliary packet data.
+            /// </summary>
             public void pull_value() => sending_value.Get(ref u8);
 
+            /// <summary>
+            /// Sets `u8` to `src`, then calls `put_bytes(handler, next_case)` to serialize a nested message.
+            /// This is used when `src` itself is the value to be serialized by `handler`.
+            /// </summary>
+            /// <param name="src">The `ulong` value to be effectively passed to or used by the `handler`.</param>
+            /// <param name="handler">The `BytesSrc` handler for the nested message part.</param>
+            /// <param name="next_case">The state to retry at if serialization by `handler` requires more buffer space.</param>
+            /// <returns>True if `handler` completed serialization successfully; false if a retry is needed.</returns>
             public bool put_bytes(ulong src, BytesSrc handler, uint next_case)
             {
                 u8 = src;
                 return put_bytes(handler, next_case);
             }
 
+            /// <summary>
+            /// Sets `u8` to `src`, then calls `put_bytes(handler)` to serialize a nested message.
+            /// This is used when `src` itself is the value to be serialized by `handler`, assuming no retry is needed.
+            /// </summary>
+            /// <param name="src">The `ulong` value to be effectively passed to or used by the `handler`.</param>
+            /// <param name="handler">The `BytesSrc` handler for the nested message part.</param>
             public void put_bytes(ulong src, BytesSrc handler)
             {
                 u8 = src;
                 put_bytes(handler);
             }
 
+            /// <summary>
+            /// Invokes the `__get_bytes` method on the provided `BytesSrc` instance `src`
+            /// to serialize its data using the current transmitter context.
+            /// Assumes `src` is part of the current serialization slot, skipping packet ID writing.
+            /// </summary>
+            /// <param name="src">The `BytesSrc` instance to serialize.</param>
             public void put_bytes(BytesSrc src)
             {
                 slot!.state = 1; //skip write id
                 src.__get_bytes(this);
             }
 
+            /// <summary>
+            /// Attempts to serialize a nested message represented by `src`.
+            /// Sets up a new slot for `src`, then invokes its `__get_bytes` method.
+            /// If `src` cannot complete serialization due to insufficient buffer space,
+            /// the transmitter's state is set to `next_case` for retry.
+            /// </summary>
+            /// <param name="src">The `BytesSrc` handler for the nested message part.</param>
+            /// <param name="next_case">The state to retry at if serialization by `src` requires more buffer space.</param>
+            /// <returns>True if `src` completed serialization successfully; false if a retry is needed.</returns>
             public bool put_bytes(BytesSrc src, uint next_case)
             {
                 var s = slot;
@@ -1537,15 +2421,43 @@ namespace org.unirail{
             }
 #endregion
 
+            /// <summary>
+            /// Implements a framing encoder that handles a byte-oriented protocol with 0xFF as a frame start marker,
+            /// 0x7F-based escaping for 0x7F and 0xFF bytes within the payload, and a 2-byte CRC.
+            /// Frame structure: 0xFF (start marker) + encoded_payload + 2_byte_CRC.
+            /// It takes raw packet data from an `upper_layer` Transmitter, encodes it, and provides the framed data via its `Read` method.
+            /// </summary>
             public class Framing : AdHoc.BytesSrc, EventsHandler{
-                public bool          isOpen() => upper_layer.isOpen();
-                public Transmitter   upper_layer; //the upper layer external interface
-                public EventsHandler handler;     //interface to the upper level internal producer
+                public bool isOpen() => upper_layer.isOpen(); // Check if the upper layer is open
 
+                /// <summary>
+                /// The `Transmitter` instance from which raw, unframed packet data is read.
+                /// </summary>
+                public Transmitter upper_layer; // Handles transmission of encoded frames
+
+                /// <summary>
+                /// Handles events for the encoding process, typically forwarding them from the original handler of the `upper_layer` before it was hooked by this framing instance.
+                /// </summary>
+                public EventsHandler handler; // Encoding process event handler
+
+                /// <summary>
+                /// Atomically exchanges the current event handler with a new one.
+                /// </summary>
+                /// <param name="handler">New event handler</param>
+                /// <returns>Previous event handler</returns>
                 public EventsHandler exchange(EventsHandler handler) => Interlocked.Exchange(ref this.handler, handler);
 
+                /// <summary>
+                /// Initializes a new instance of the <see cref="Framing"/> class.
+                /// </summary>
+                /// <param name="upper_layer">The `Transmitter` instance that will provide the raw packets to be framed.</param>
                 public Framing(Transmitter upper_layer) => switch_to(upper_layer);
 
+                /// <summary>
+                /// Switches the framing layer to operate on a new `upper_layer` transmitter.
+                /// This also resets the internal state of the framing encoder and hooks its event handling into the new `upper_layer`.
+                /// </summary>
+                /// <param name="upper_layer">New `Transmitter` instance to provide raw packets.</param>
                 public void switch_to(Transmitter upper_layer)
                 {
                     bits  = 0;
@@ -1560,16 +2472,23 @@ namespace org.unirail{
                     handler = (this.upper_layer = upper_layer).exchange(this);
                 }
 
-                private int enc_position; //where start to put encoded bytes
-                private int raw_position; //start position for temporarily storing raw bytes from the upper layer
+                private int enc_position; // Current position for writing encoded bytes
+                private int raw_position; // Current position for reading raw input bytes
 
+                /// <summary>
+                /// Estimates the required space in the output buffer (`dst` in `Read` method) to hold
+                /// a segment of raw data after encoding, including frame markers and CRC.
+                /// This is used to determine how much raw data can be safely read from the `upper_layer`.
+                /// </summary>
+                /// <param name="limit">The total available size of the current output buffer segment.</param>
+                /// <returns>True if sufficient space is estimated to be available in the output buffer for reading more raw data and encoding it; false otherwise.</returns>
                 private bool allocate_raw_bytes_space(int limit)
                 {
-                    //divide free space.
+                    // Divide free space.
                     raw_position = enc_position               +
-                                   1                          +    //for 0xFF byte - frame start mark.
-                                   (limit - enc_position) / 8 +    //ensure enough space for encoded bytes in a worse case
-                                   CRC_LEN_BYTES              + 2; //guaranty space for CRC + its expansion
+                                   1                          +    // Space for 0xFF frame start marker
+                                   (limit - enc_position) / 8 +    // Worst case byte expansion for payload (approx)
+                                   CRC_LEN_BYTES              + 2; // CRC plus possible expansion (max 2 extra bytes for 0x7F encoding of CRC)
 
                     return raw_position < limit;
                 }
@@ -1580,6 +2499,10 @@ namespace org.unirail{
                     upper_layer.Close();
                 }
 
+                /// <summary>
+                /// Resets the internal state of the framing encoder and the `upper_layer` transmitter.
+                /// This prepares it for a new sequence of packets or a new connection.
+                /// </summary>
                 protected void Reset()
                 {
                     upper_layer.Reset();
@@ -1588,6 +2511,18 @@ namespace org.unirail{
                     crc   = 0;
                 }
 
+                /// <summary>
+                /// Reads raw packet data from the `upper_layer`, encodes it using the framing protocol
+                /// (including 0x7F escaping and CRC calculation), and writes the resulting framed bytes into `dst`.
+                /// </summary>
+                /// <param name="dst">The destination buffer for the encoded, framed data.</param>
+                /// <param name="dst_byte">The starting offset in `dst` to write to.</param>
+                /// <param name="dst_bytes">The maximum number of bytes to write to `dst`.</param>
+                /// <returns>
+                /// The number of bytes written to `dst`.
+                /// Returns 0 if `dst` has insufficient space.
+                /// Returns -1 if the `upper_layer` has no more raw packets to provide.
+                /// </returns>
                 public int Read(byte[] dst, int dst_byte, int dst_bytes)
                 {
                     enc_position = dst_byte;
@@ -1618,6 +2553,14 @@ namespace org.unirail{
                     dst.buffer![enc_position++] = 0xFF; //write starting frame byte
                 }
 
+                /// <summary>
+                /// Handles the `onSent` event from the `upper_layer` transmitter.
+                /// This signifies that a complete raw packet has been provided by the `upper_layer`.
+                /// This method encodes any remaining bytes of that packet, then encodes and appends the CRC checksum.
+                /// It finalizes any bit-level encoding for the frame and resets its state for the next packet.
+                /// </summary>
+                /// <param name="dst">The `upper_layer` transmitter instance.</param>
+                /// <param name="src">The `BytesSrc` instance of the packet that was just completed by `upper_layer`.</param>
                 public void onSent(Transmitter dst, BytesSrc src)
                 {
                     while( raw_position < dst.byte_ )
@@ -1644,6 +2587,14 @@ namespace org.unirail{
                     handler.onSent(dst, src);
                 }
 
+                /// <summary>
+                /// Encodes a single source byte into the destination buffer, applying 0x7F-based escaping
+                /// and updating the running CRC. Manages a bit accumulator for byte alignment.
+                /// </summary>
+                /// <param name="src">The source byte to encode.</param>
+                /// <param name="dst">The destination buffer for encoded bytes.</param>
+                /// <param name="dst_byte">The current write position in `dst`.</param>
+                /// <returns>The updated write position in `dst` after encoding the byte.</returns>
                 private int encode(int src, byte[] dst, int dst_byte)
                 {
                     crc = crc16((byte)src, crc);
@@ -1677,21 +2628,38 @@ namespace org.unirail{
                     return dst_byte;
                 }
 
-                public  Action<AdHoc.BytesSrc>? subscribeOnNewBytesToTransmitArrive(Action<AdHoc.BytesSrc>? subscriber) => upper_layer.subscribeOnNewBytesToTransmitArrive(subscriber);
-                private int                     bits;
-                private int                     shift;
-                private ushort                  crc;
+                public Action<AdHoc.BytesSrc>? subscribeOnNewBytesToTransmitArrive(Action<AdHoc.BytesSrc>? subscriber) => upper_layer.subscribeOnNewBytesToTransmitArrive(subscriber);
+
+                // Internal state variables
+                private int    bits;  // Accumulator for bits during 0x7F-based encoding.
+                private int    shift; // Current bit shift within the `bits` accumulator.
+                private ushort crc;   // Running CRC16 checksum for the current frame's payload.
             }
 
 #region Slot
+            /// <summary>
+            /// Internal class representing a slot in the transmitter's processing chain, typically for nested messages.
+            /// It extends `Context.Transmitter.Slot` and holds message-specific state.
+            /// </summary>
             internal sealed class Slot : Context.Transmitter.Slot{
+                /// <summary>
+                /// The `BytesSrc` instance responsible for serializing the current message or part of a message associated with this slot.
+                /// </summary>
                 internal BytesSrc src;
 
+                /// <summary>
+                /// A bitmask indicating which fields of a message are null. Used by some serialization schemes.
+                /// </summary>
                 internal int fields_nulls;
 
                 internal          Slot? next;
                 internal readonly Slot? prev;
 
+                /// <summary>
+                /// Initializes a new instance of the <see cref="Slot"/> class.
+                /// </summary>
+                /// <param name="src">The `Transmitter` associated with this slot chain.</param>
+                /// <param name="prev">The previous slot in the chain, or null if this is the root slot.</param>
                 public Slot(Transmitter src, Slot? prev) : base(src)
                 {
                     this.prev = prev;
@@ -1704,6 +2672,13 @@ namespace org.unirail{
             internal Slot?               slot;
 #endregion
 
+            /// <summary>
+            /// Initializes the `fields_nulls` bitmask in the current slot with a starting bit.
+            /// Also allocates 1 byte in the buffer for storing this bitmask later via `flush_fields_nulls`.
+            /// </summary>
+            /// <param name="field0_bit">The initial bit value for the nulls bitmask (e.g., representing the first field).</param>
+            /// <param name="this_case">The state to retry at if buffer allocation fails.</param>
+            /// <returns>True if allocation is successful and bitmask initialized; false if a retry is needed.</returns>
             public bool init_fields_nulls(int field0_bit, uint this_case)
             {
                 if( !Allocate(1, this_case) )
@@ -1712,16 +2687,34 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Sets a specific bit in the `fields_nulls` bitmask of the current slot.
+            /// This is used to mark a field as non-null (by convention, a set bit means non-null).
+            /// </summary>
+            /// <param name="field">The bit corresponding to the field to mark (e.g., a power of 2).</param>
             public void set_fields_nulls(int field) { slot!.fields_nulls |= field; }
 
+            /// <summary>
+            /// Writes the `fields_nulls` bitmask from the current slot as a single byte into the buffer.
+            /// Assumes space was previously allocated by `init_fields_nulls`.
+            /// </summary>
             public void flush_fields_nulls() { put((byte)slot!.fields_nulls); }
 
+            /// <summary>
+            /// Checks if a specific field is marked as null based on the `fields_nulls` bitmask in the current slot.
+            /// </summary>
+            /// <param name="field">The bit representing the field to check (e.g., a power of 2).</param>
+            /// <returns>True if the field's corresponding bit is NOT set in `fields_nulls` (meaning it is null, by convention where 0 means null); false otherwise.</returns>
             public bool is_null(int field) => (slot!.fields_nulls & field) == 0;
 
             public bool isOpen() => slot != null;
 
             public virtual void Close() => Reset();
 
+            /// <summary>
+            /// Resets the transmitter's internal state, including clearing any active slots, sending queues, buffers,
+            /// and resetting processing modes. This prepares the transmitter for a new connection or sequence of packets.
+            /// </summary>
             protected void Reset()
             {
                 if( slot == null )
@@ -1738,12 +2731,25 @@ namespace org.unirail{
                 bytes_left = 0; //requires correct bitwise sending
             }
 
-            //if dst == null - clean / reset state
+            //if dst == null - clean / reset state (Note: dst is never null in this implementation's usage)
             //
-            //if 0 < return - bytes read
+            //if 0 < return - bytes read (i.e., bytes written to dst)
             //if return == 0 - not enough space in provided buffer dst available
             //if return == -1 -  no more packets left
-
+            /// <summary>
+            /// Reads data from the internal sending queue, processes it through the current transmitter slot's
+            /// serialization logic (if any is active or a new one is started), and writes the serialized output bytes
+            /// into the provided `dst` buffer. Invokes `onSending` and `onSent` events as packets are processed.
+            /// This method is the core of the `BytesSrc` implementation for `Transmitter`.
+            /// </summary>
+            /// <param name="dst">The destination byte array where serialized data will be written.</param>
+            /// <param name="dst_byte">The starting offset in `dst`.</param>
+            /// <param name="dst_bytes">The maximum number of bytes to write into `dst`.</param>
+            /// <returns>
+            /// The number of bytes written to `dst`.
+            /// Returns 0 if `dst` has insufficient space to write even a part of the next packet segment.
+            /// Returns -1 if there are no more packets in the sending queue to process.
+            /// </returns>
             public int Read(byte[] dst, int dst_byte, int dst_bytes)
             {
                 if( dst_bytes < 1 )
@@ -1817,7 +2823,9 @@ namespace org.unirail{
                                 break;
                         }
 
-                    mode = OK; //restore the state
+                    mode = OK; // Restore mode to OK after resuming transmission
+
+                    // Get bytes from byte source and put into buffer
                     for( ;; )
                         if( !slot!.src!.__get_bytes(this) )
                             goto exit;
@@ -1844,6 +2852,13 @@ namespace org.unirail{
                            -1; //no more packets left
             }
 
+            /// <summary>
+            /// Checks if a specified number of bytes can be allocated in the current output buffer.
+            /// If not, sets the transmitter to retry mode at `this_case`.
+            /// </summary>
+            /// <param name="bytes">The number of bytes required in the buffer.</param>
+            /// <param name="this_case">The state to set for retry if allocation fails due to insufficient space.</param>
+            /// <returns>True if `bytes` are available in the remaining buffer; false if not and retry mode is set.</returns>
             public bool Allocate(uint bytes, uint this_case)
             {
                 slot!.state = this_case;
@@ -1853,22 +2868,40 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Puts a boolean value into the buffer, encoded as a single bit (1 for true, 0 for false),
+            /// using the bitwise serialization mechanism.
+            /// </summary>
+            /// <param name="src">The boolean value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(bool src) => put_bits(src ?
                                                       1 :
                                                       0, 1);
 
+            /// <summary>
+            /// Puts a nullable boolean value into the buffer, encoded as two bits:
+            /// 00 for null, 10 for false, 11 for true.
+            /// Uses the bitwise serialization mechanism.
+            /// </summary>
+            /// <param name="src">The nullable boolean value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(bool? src) => put_bits(src.HasValue ?
                                                        src.Value ?
-                                                           3 :
-                                                           2 :
-                                                       0, 2);
+                                                           3 : // 11 binary
+                                                           2 : // 10 binary
+                                                       0, 2);  // 00 binary
 
 #region bits
             private int  bits_byte = -1;
             private uint bits_transaction_bytes_;
 
+            /// <summary>
+            /// Initializes a bitwise transaction, ensuring `transaction_bytes` are available.
+            /// This version is typically called to *continue* a bitwise operation after a retry.
+            /// </summary>
+            /// <param name="transaction_bytes">Minimum number of bytes that should be available in the buffer for this transaction segment.</param>
+            /// <param name="this_case">The state to retry at if `transaction_bytes` are not available.</param>
+            /// <returns>True if sufficient bytes are available; false if a retry is needed (mode set to BITS).</returns>
             public bool init_bits_(uint transaction_bytes, uint this_case)
             {
                 if( (bits_transaction_bytes_ = transaction_bytes) <= byte_max - byte_ )
@@ -1879,6 +2912,14 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Initializes a bitwise transaction. Allocates one byte in the buffer to start accumulating bits
+            /// and ensures at least `transaction_bytes` are available for the whole operation.
+            /// Resets `bits` accumulator and `bit` pointer.
+            /// </summary>
+            /// <param name="transaction_bytes">Minimum number of bytes that should be available in the buffer for this transaction. This includes the initial byte allocated here.</param>
+            /// <param name="this_case">The state to retry at if `transaction_bytes` are not available.</param>
+            /// <returns>True if sufficient bytes are available and bitwise context is initialized; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool init_bits(uint transaction_bytes, uint this_case)
             {
@@ -1891,10 +2932,22 @@ namespace org.unirail{
 
                 bits      = 0;
                 bit       = 0;
-                bits_byte = byte_++; //Allocate space
+                bits_byte = byte_++; //Allocate space for the first byte of bits
                 return true;
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public void put_bits(bool src) => put_bits(src ?
+                                                           1 :
+                                                           0, 1);
+
+            /// <summary>
+            /// Puts a specified number of bits from `src` into the bit accumulator (`bits`).
+            /// If the accumulator fills a byte, that byte is written to `buffer[bits_byte]`,
+            /// `bits_byte` is advanced, and the accumulator is updated.
+            /// </summary>
+            /// <param name="src">The integer containing the bits to put (in its lower `len_bits`).</param>
+            /// <param name="len_bits">The number of bits from `src` to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put_bits(int src, int len_bits)
             {
@@ -1907,6 +2960,19 @@ namespace org.unirail{
                 bits_byte          =   byte_++;
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public void put_bits(bool src, uint continue_at_case) => put_bits(src ?
+                                                                                  1 :
+                                                                                  0, 1, continue_at_case);
+            /// <summary>
+            /// Puts a specified number of bits from `src` into the bit accumulator, with retry capability.
+            /// If writing a filled byte requires more buffer space than `bits_transaction_bytes_` allows from current `byte_`,
+            /// it sets up a retry.
+            /// </summary>
+            /// <param name="src">The integer containing the bits to put.</param>
+            /// <param name="len_bits">The number of bits from `src` to put.</param>
+            /// <param name="continue_at_case">The state to retry at if buffer space runs out.</param>
+            /// <returns>True if bits were put successfully (or partially, with more buffer available); false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put_bits(int src, int len_bits, uint continue_at_case)
             {
@@ -1926,7 +2992,12 @@ namespace org.unirail{
                 return true;
             }
 
-            //end of varint mode called once per batch
+            /// <summary>
+            /// Finalizes the current bitwise transaction. If any bits are remaining in the `bits` accumulator
+            /// (i.e., `0 ᐸ bit`), they are written to `buffer[bits_byte]`. If no bits were written to the
+            /// current `bits_byte` (i.e. `bit == 0`), `byte_` is trimmed back to `bits_byte`, effectively
+            /// de-allocating the unused byte.
+            /// </summary>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void end_bits()
             {
@@ -1936,6 +3007,14 @@ namespace org.unirail{
                     byte_ = bits_byte; //trim byte at bits_byte index. allocated, but not used
             }
 
+            /// <summary>
+            /// Puts a nulls bitmask using `put_bits`. If `put_bits` requires a retry,
+            /// this method sets the mode to `BITS` for continuation.
+            /// </summary>
+            /// <param name="nulls">The nulls bitmask value.</param>
+            /// <param name="nulls_bits">The number of bits in the `nulls` bitmask.</param>
+            /// <param name="continue_at_case">The state to retry at if putting bits fails.</param>
+            /// <returns>True if the nulls bitmask was put successfully; false if a retry is needed.</returns>
             public bool put_nulls(int nulls, int nulls_bits, uint continue_at_case)
             {
                 if( put_bits(nulls, nulls_bits, continue_at_case) )
@@ -1945,6 +3024,12 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Sets up a retry for a bitwise operation that was interrupted.
+            /// Resets `byte_` to `bits_byte` (start of current bit-holding byte) and sets mode to `BITS`
+            /// and state to `continue_at_case`.
+            /// </summary>
+            /// <param name="continue_at_case">The state to resume the bitwise operation at.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void continue_bits_at(uint continue_at_case)
             {
@@ -1954,6 +3039,21 @@ namespace org.unirail{
             }
 #endregion
 
+            public bool put_bits_bytes(int info, int info_bits, double value, int value_bytes, uint continue_at_case) => put_bits_bytes(info, info_bits, Unsafe.As<double, ulong>(ref value), value_bytes, continue_at_case);
+            public bool put_bits_bytes(int info, int info_bits, float  value, int value_bytes, uint continue_at_case) => put_bits_bytes(info, info_bits, Unsafe.As<float, uint>(ref value),   value_bytes, continue_at_case);
+
+            /// <summary>
+            /// Puts a sequence of `info_bits` followed by `value_bytes` representing `value`.
+            /// This is a common pattern for length-prefixed or type-prefixed fields.
+            /// If `put_bits` for `info` requires retry, sets mode to `BITS_BYTES` and stores `value` and `value_bytes`
+            /// in `u8` and `bytes_left` respectively for continuation.
+            /// </summary>
+            /// <param name="info">The integer containing the information bits (e.g., length or type).</param>
+            /// <param name="info_bits">The number of bits to take from `info`.</param>
+            /// <param name="value">The `ulong` value to write after the info bits.</param>
+            /// <param name="value_bytes">The number of bytes to use for serializing `value`.</param>
+            /// <param name="continue_at_case">The state to retry at if operation fails.</param>
+            /// <returns>True if both info bits and value bytes were put successfully; false if a retry is needed.</returns>
             public bool put_bits_bytes(int info, int info_bits, ulong value, int value_bytes, uint continue_at_case)
             {
                 if( put_bits(info, info_bits, continue_at_case) )
@@ -1973,12 +3073,29 @@ namespace org.unirail{
                                                         1 :
                                                         2;
 
+            /// <summary>
+            /// Puts a varint-like value `src` using 1 bit for length (0 for 1 byte, 1 for 2 bytes)
+            /// followed by the value itself (1 or 2 bytes).
+            /// Uses `put_bits_bytes` for combined bit and byte writing.
+            /// </summary>
+            /// <param name="src">The ulong value to encode (expected to fit in 1 or 2 bytes).</param>
+            /// <param name="continue_at_case">The state to retry at if writing fails.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint21(ulong src, uint continue_at_case)
             {
                 var bytes = bytes1(src);
                 return put_bits_bytes(bytes - 1, 1, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` (1 or 2 bytes) prefixed by `nulls_bits` and 1 bit for length.
+            /// The length bit is 0 for 1 byte payload, 1 for 2 bytes payload.
+            /// </summary>
+            /// <param name="src">The ulong value to encode.</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <param name="nulls">The nulls bitmask.</param>
+            /// <param name="nulls_bits">Number of bits in the nulls bitmask.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint21(ulong src, uint continue_at_case, int nulls, int nulls_bits)
             {
                 var bytes = bytes1(src);
@@ -1989,12 +3106,28 @@ namespace org.unirail{
                                                     : src < 1 << 16 ? 2
                                                                       : 3;
 
+            /// <summary>
+            /// Puts a varint-like value `src` using 2 bits for length (1 for 1 byte, 2 for 2 bytes, 3 for 3 bytes)
+            /// followed by the value itself (1, 2, or 3 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode (expected to fit in 1-3 bytes).</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint32(ulong src, uint continue_at_case)
             {
                 var bytes = bytes2(src);
                 return put_bits_bytes(bytes, 2, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` (1-3 bytes) prefixed by `nulls_bits` and 2 bits for length.
+            /// Length bits are actual byte count (1, 2, or 3).
+            /// </summary>
+            /// <param name="src">The ulong value to encode.</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <param name="nulls">The nulls bitmask.</param>
+            /// <param name="nulls_bits">Number of bits in the nulls bitmask.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint32(ulong src, uint continue_at_case, int nulls, int nulls_bits)
             {
                 var bytes = bytes2(src);
@@ -2007,12 +3140,28 @@ namespace org.unirail{
                                                     : src < 1L << 24 ? 3
                                                                        : 4;
 
+            /// <summary>
+            /// Puts a varint-like value `src` using 2 bits for length (0 for 1 byte, ... , 3 for 4 bytes)
+            /// followed by the value itself (1 to 4 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode (expected to fit in 1-4 bytes).</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint42(ulong src, uint continue_at_case)
             {
                 var bytes = bytes3(src);
                 return put_bits_bytes(bytes - 1, 2, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` (1-4 bytes) prefixed by `nulls_bits` and 2 bits for length.
+            /// Length bits are 0-indexed (0 for 1 byte payload, ..., 3 for 4 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode.</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <param name="nulls">The nulls bitmask.</param>
+            /// <param name="nulls_bits">Number of bits in the nulls bitmask.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint42(ulong src, uint continue_at_case, int nulls, int nulls_bits)
             {
                 var bytes = bytes3(src);
@@ -2029,12 +3178,28 @@ namespace org.unirail{
                                                     : src < 1L << 48 ? 6
                                                                        : 7;
 
+            /// <summary>
+            /// Puts a varint-like value `src` using 3 bits for length (actual byte count 1-7)
+            /// followed by the value itself (1 to 7 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode (expected to fit in 1-7 bytes).</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint73(ulong src, uint continue_at_case)
             {
                 var bytes = bytes4(src);
                 return put_bits_bytes(bytes, 3, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` (1-7 bytes) prefixed by `nulls_bits` and 3 bits for length.
+            /// Length bits are actual byte count (1-7).
+            /// </summary>
+            /// <param name="src">The ulong value to encode.</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <param name="nulls">The nulls bitmask.</param>
+            /// <param name="nulls_bits">Number of bits in the nulls bitmask.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint73(ulong src, uint continue_at_case, int nulls, int nulls_bits)
             {
                 var bytes = bytes4(src);
@@ -2052,30 +3217,70 @@ namespace org.unirail{
                                                     : src < 1L << 56 ? 7
                                                                        : 8;
 
+            /// <summary>
+            /// Puts a varint-like value `src` using 3 bits for length (0 for 1 byte, ..., 7 for 8 bytes)
+            /// followed by the value itself (1 to 8 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode (fits in 1-8 bytes).</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint83(ulong src, uint continue_at_case)
             {
                 var bytes = bytes5(src);
                 return put_bits_bytes(bytes - 1, 3, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` (1-8 bytes) prefixed by `nulls_bits` and 3 bits for length.
+            /// Length bits are 0-indexed (0 for 1 byte payload, ..., 7 for 8 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode.</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <param name="nulls">The nulls bitmask.</param>
+            /// <param name="nulls_bits">Number of bits in the nulls bitmask.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint83(ulong src, uint continue_at_case, int nulls, int nulls_bits)
             {
                 var bytes = bytes5(src);
                 return put_bits_bytes(bytes - 1 << nulls_bits | nulls, nulls_bits + 3, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` using 4 bits for length (actual byte count 1-8, values 9-15 unused or reserved)
+            /// followed by the value itself (1 to 8 bytes).
+            /// </summary>
+            /// <param name="src">The ulong value to encode (fits in 1-8 bytes).</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint84(ulong src, uint continue_at_case)
             {
                 var bytes = bytes5(src);
                 return put_bits_bytes(bytes, 4, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a varint-like value `src` (1-8 bytes) prefixed by `nulls_bits` and 4 bits for length.
+            /// Length bits are actual byte count (1-8).
+            /// </summary>
+            /// <param name="src">The ulong value to encode.</param>
+            /// <param name="continue_at_case">The state to retry at.</param>
+            /// <param name="nulls">The nulls bitmask.</param>
+            /// <param name="nulls_bits">Number of bits in the nulls bitmask.</param>
+            /// <returns>True if successful; false if retry is needed.</returns>
             public bool put_varint84(ulong src, uint continue_at_case, int nulls, int nulls_bits)
             {
                 var bytes = bytes5(src);
                 return put_bits_bytes(bytes << nulls_bits | nulls, nulls_bits + 4, src, bytes, continue_at_case);
             }
 
+            /// <summary>
+            /// Puts a standard varint-encoded `ulong` value into the buffer.
+            /// If not enough buffer space, sets mode to `VARINT` and state to `next_case` for retry,
+            /// storing `src` in `u8_` for continuation.
+            /// </summary>
+            /// <param name="src">The ulong value to varint-encode and put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the varint was put successfully; false if a retry is needed.</returns>
             public bool put_varint(ulong src, uint next_case)
             {
                 if( varint(src) )
@@ -2086,8 +3291,20 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Puts the varint-encoded value currently stored in `u8_` into the buffer.
+            /// This is used for retrying a `put_varint` operation.
+            /// </summary>
+            /// <returns>True if the varint was put successfully; false if more buffer space is needed.</returns>
             private bool varint() => varint(u8_);
 
+            /// <summary>
+            /// Writes a `ulong` value into the buffer using standard varint encoding.
+            /// Each byte written has its MSB set if more bytes follow; the last byte has MSB clear.
+            /// Only 7 bits per byte are used for data.
+            /// </summary>
+            /// <param name="src">The `ulong` value to encode and write.</param>
+            /// <returns>True if the entire varint value was written to the buffer; false if the buffer ran out of space, in which case `u8_` stores the remaining part of `src` to be encoded.</returns>
             private bool varint(ulong src)
             {
                 for( ; byte_ < byte_max; buffer![byte_++] = (byte)(0x80 | src), src >>= 7 )
@@ -2101,9 +3318,25 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Encodes a signed long value using ZigZag encoding.
+            /// This maps signed integers to unsigned integers so that numbers with a small absolute value
+            /// (i.e., close to zero, positive or negative) have a small varint encoded value.
+            /// </summary>
+            /// <param name="src">The signed long value to encode.</param>
+            /// <param name="right">The number of bits to right-shift `src` in the XOR operation (typically 63 for Int64).</param>
+            /// <returns>The ZigZag-encoded unsigned long value.</returns>
             public static ulong zig_zag(long src, int right) => (ulong)(src << 1 ^ src >> right);
 #endregion
 
+            /// <summary>
+            /// Puts a `ulong` value `src` into the buffer using a fixed number of `bytes`.
+            /// If not enough buffer space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The `ulong` value to put.</param>
+            /// <param name="bytes">The number of bytes to use for `src` (1 to 8).</param>
+            /// <param name="next_field_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put_val(ulong src, int bytes, uint next_field_case)
             {
@@ -2117,6 +3350,13 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Puts a `ulong` value `src` into the buffer using a fixed number of `bytes`,
+            /// respecting endianness. Advances buffer position.
+            /// Assumes sufficient space is available.
+            /// </summary>
+            /// <param name="src">The `ulong` value to put.</param>
+            /// <param name="bytes">The number of bytes to use for `src` (1 to 8).</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put_val(ulong src, int bytes)
             {
@@ -2155,6 +3395,14 @@ namespace org.unirail{
                 }
             }
 
+            /// <summary>
+            /// Puts a `uint` value `src` into the buffer using a fixed number of `bytes`.
+            /// If not enough buffer space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The `uint` value to put.</param>
+            /// <param name="bytes">The number of bytes to use for `src` (1 to 4).</param>
+            /// <param name="next_field_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put_val(uint src, int bytes, uint next_field_case)
             {
@@ -2168,6 +3416,13 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Puts a `uint` value `src` into the buffer using a fixed number of `bytes`,
+            /// respecting endianness. Advances buffer position.
+            /// Assumes sufficient space is available.
+            /// </summary>
+            /// <param name="src">The `uint` value to put.</param>
+            /// <param name="bytes">The number of bytes to use for `src` (1 to 4).</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put_val(uint src, int bytes)
             {
@@ -2190,6 +3445,14 @@ namespace org.unirail{
                 }
             }
 
+            /// <summary>
+            /// Puts a string into the buffer using varint encoding for its length and for each character.
+            /// If not enough buffer space, sets mode to `STR` and state to `next_case` for retry,
+            /// storing `src` in the `str` field for continuation.
+            /// </summary>
+            /// <param name="src">The string to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the string was put successfully; false if a retry is needed.</returns>
             public bool put(string src, uint next_case)
             {
                 u4 = uint.MaxValue; //indicate state before string length send
@@ -2209,6 +3472,14 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Sets up a retry operation for putting a `uint` value.
+            /// Stores `src`, `bytes`, and `next_case` in `u4`, `bytes_left`, and `slot.state` respectively.
+            /// Sets mode to `VAL4`.
+            /// </summary>
+            /// <param name="src">The `uint` value that needs to be written.</param>
+            /// <param name="bytes">The number of bytes `src` should occupy (1 to 4).</param>
+            /// <param name="next_case">The state to resume at when more buffer space is available.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             private void put(uint src, int bytes, uint next_case)
             {
@@ -2218,6 +3489,14 @@ namespace org.unirail{
                 mode        = VAL4;
             }
 
+            /// <summary>
+            /// Sets up a retry operation for putting a `ulong` value.
+            /// Stores `src`, `bytes`, and `next_case` in `u8`, `bytes_left`, and `slot.state` respectively.
+            /// Sets mode to `VAL8`.
+            /// </summary>
+            /// <param name="src">The `ulong` value that needs to be written.</param>
+            /// <param name="bytes">The number of bytes `src` should occupy (1 to 8).</param>
+            /// <param name="next_case">The state to resume at when more buffer space is available.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             private void put(ulong src, int bytes, uint next_case)
             {
@@ -2227,6 +3506,11 @@ namespace org.unirail{
                 mode        = VAL8;
             }
 
+            /// <summary>
+            /// Sets the transmitter's current processing mode to `RETRY` and records `the_case` as the state
+            /// to resume from when more buffer space is available (or operation can be retried).
+            /// </summary>
+            /// <param name="the_case">The specific state or step in the serialization logic to resume at.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void retry_at(uint the_case)
             {
@@ -2234,6 +3518,16 @@ namespace org.unirail{
                 mode        = RETRY;
             }
 
+            /// <summary>
+            /// Calculates the minimum number of bytes required to represent an integer value.
+            /// 0 requires 0 bytes (by some conventions, not universally).
+            /// 1-255 requires 1 byte.
+            /// 256-65535 requires 2 bytes.
+            /// 65536-16777215 requires 3 bytes.
+            /// Larger values up to Int32.MaxValue require 4 bytes.
+            /// </summary>
+            /// <param name="value">The integer value.</param>
+            /// <returns>The number of bytes required (0-4).</returns>
             public int bytes4value(int value) => value < 0xFFFF ? value < 0xFF ?
                                                                       value == 0 ?
                                                                           0 :
@@ -2242,27 +3536,79 @@ namespace org.unirail{
                                                  : value < 0xFFFFFF ? 3
                                                                       : 4;
 
+            /// <summary>
+            /// Puts a boolean value into the buffer as a single byte (1 for true, 0 for false).
+            /// If not enough buffer space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The boolean value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the byte was put successfully; false if a retry is needed.</returns>
+            [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+            public bool put(bool src, uint next_case) => put(src ?
+                                                                 (byte)1 :
+                                                                 (byte)0, next_case);
+
+            /// <summary>
+            /// Puts a signed byte value into the buffer. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The signed byte value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(sbyte src) => buffer![byte_++] = (byte)src;
 
+            /// <summary>
+            /// Puts a nullable signed byte value into the buffer. Assumes the value is not null and sufficient space is available.
+            /// </summary>
+            /// <param name="src">The nullable signed byte value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(sbyte? src) => buffer![byte_++] = (byte)src!.Value;
 
+            /// <summary>
+            /// Puts a signed byte value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The signed byte value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the byte was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(sbyte src, uint next_case) => put((byte)src, next_case);
 
+            /// <summary>
+            /// Puts a nullable signed byte value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable signed byte value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the byte was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(sbyte? src, uint next_case) => put((byte)src!.Value, next_case);
 
+            /// <summary>
+            /// Puts an unsigned byte value into the buffer. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The unsigned byte value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(byte src) => buffer![byte_++] = src;
 
+            /// <summary>
+            /// Puts a nullable unsigned byte value into the buffer. Assumes the value is not null and sufficient space is available.
+            /// </summary>
+            /// <param name="src">The nullable unsigned byte value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(byte? src) => buffer![byte_++] = src!.Value;
 
+            /// <summary>
+            /// Puts a nullable unsigned byte value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable unsigned byte value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the byte was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(byte? src, uint next_case) => put(src!.Value, next_case);
 
+            /// <summary>
+            /// Puts an unsigned byte value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The unsigned byte value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the byte was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(byte src, uint next_case)
             {
@@ -2276,15 +3622,39 @@ namespace org.unirail{
                 return false;
             }
 
+            /// <summary>
+            /// Puts a nullable short (Int16) value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable short value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(short? src, uint next_case) => put((ushort)src!.Value, next_case);
 
+            /// <summary>
+            /// Puts a short (Int16) value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The short value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(short src, uint next_case) => put((ushort)src, next_case);
 
+            /// <summary>
+            /// Puts a nullable unsigned short (UInt16) value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable unsigned short value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(ushort? src, uint next_case) => put(src!.Value, next_case);
 
+            /// <summary>
+            /// Puts an unsigned short (UInt16) value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The unsigned short value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(ushort src, uint next_case)
             {
@@ -2298,15 +3668,31 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Puts a short (Int16) value into the buffer. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The short value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(short src) => put((ushort)src);
 
+            /// <summary>
+            /// Puts a nullable short (Int16) value into the buffer. Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable short value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(short? src) => put((ushort)src!.Value);
 
+            /// <summary>
+            /// Puts a nullable unsigned short (UInt16) value into the buffer. Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable unsigned short value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(ushort? src) => put(src!.Value);
 
+            /// <summary>
+            /// Puts an unsigned short (UInt16) value into the buffer using appropriate endianness. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The unsigned short value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(ushort src)
             {
@@ -2314,15 +3700,39 @@ namespace org.unirail{
                 byte_ += 2;
             }
 
+            /// <summary>
+            /// Puts an integer (Int32) value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The integer value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(int src, uint next_case) => put((uint)src, next_case);
 
+            /// <summary>
+            /// Puts a nullable integer (Int32) value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable integer value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(int? src, uint next_case) => put((uint)src!.Value, next_case);
 
+            /// <summary>
+            /// Puts a float value into the buffer (as its UInt32 bit representation). If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The float value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(float src, uint next_case) => put(Unsafe.As<float, uint>(ref src), next_case);
 
+            /// <summary>
+            /// Puts a nullable float value into the buffer (as its UInt32 bit representation). Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable float value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(float? src, uint next_case)
             {
@@ -2330,9 +3740,21 @@ namespace org.unirail{
                 return put(Unsafe.As<float, uint>(ref f), next_case);
             }
 
+            /// <summary>
+            /// Puts a nullable unsigned integer (UInt32) value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable unsigned integer value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(uint? src, uint next_case) => put(src!.Value, next_case);
 
+            /// <summary>
+            /// Puts an unsigned integer (UInt32) value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The unsigned integer value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(uint src, uint next_case)
             {
@@ -2346,12 +3768,24 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Puts an integer (Int32) value into the buffer. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The integer value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(int src) => put((uint)src);
 
+            /// <summary>
+            /// Puts a nullable integer (Int32) value into the buffer. Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable integer value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(int? src) => put((uint)src!.Value);
 
+            /// <summary>
+            /// Puts a nullable float value into the buffer (as its UInt32 bit representation). Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable float value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(float? src)
             {
@@ -2359,12 +3793,24 @@ namespace org.unirail{
                 put(Unsafe.As<float, uint>(ref f));
             }
 
+            /// <summary>
+            /// Puts a float value into the buffer (as its UInt32 bit representation). Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The float value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(float src) => put(Unsafe.As<float, uint>(ref src));
 
+            /// <summary>
+            /// Puts a nullable unsigned integer (UInt32) value into the buffer. Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable unsigned integer value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(uint? src) => put(src!.Value);
 
+            /// <summary>
+            /// Puts an unsigned integer (UInt32) value into the buffer using appropriate endianness. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The unsigned integer value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(uint src)
             {
@@ -2372,15 +3818,39 @@ namespace org.unirail{
                 byte_ += 4;
             }
 
+            /// <summary>
+            /// Puts a long (Int64) value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The long value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(long src, uint next_case) => put((ulong)src, next_case);
 
+            /// <summary>
+            /// Puts a nullable long (Int64) value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable long value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(long? src, uint next_case) => put((ulong)src!.Value, next_case);
 
+            /// <summary>
+            /// Puts a double value into the buffer (as its UInt64 bit representation). If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The double value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(double src, uint next_case) => put(Unsafe.As<double, ulong>(ref src), next_case);
 
+            /// <summary>
+            /// Puts a nullable double value into the buffer (as its UInt64 bit representation). Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable double value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(double? src, uint next_case)
             {
@@ -2388,9 +3858,21 @@ namespace org.unirail{
                 return put(Unsafe.As<double, ulong>(ref d), next_case);
             }
 
+            /// <summary>
+            /// Puts a nullable unsigned long (UInt64) value into the buffer. Assumes value is not null. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The nullable unsigned long value to put. Must have a value.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(ulong? src, uint next_case) => put(src!.Value, next_case);
 
+            /// <summary>
+            /// Puts an unsigned long (UInt64) value into the buffer. If not enough space, sets up a retry.
+            /// </summary>
+            /// <param name="src">The unsigned long value to put.</param>
+            /// <param name="next_case">The state to retry at if writing fails.</param>
+            /// <returns>True if the value was put successfully; false if a retry is needed.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public bool put(ulong src, uint next_case)
             {
@@ -2404,9 +3886,17 @@ namespace org.unirail{
                 return true;
             }
 
+            /// <summary>
+            /// Puts a double value into the buffer (as its UInt64 bit representation). Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The double value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(double src) => put(Unsafe.As<double, ulong>(ref src));
 
+            /// <summary>
+            /// Puts a nullable double value into the buffer (as its UInt64 bit representation). Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable double value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(double? src)
             {
@@ -2414,15 +3904,31 @@ namespace org.unirail{
                 put(Unsafe.As<double, ulong>(ref d));
             }
 
+            /// <summary>
+            /// Puts a long (Int64) value into the buffer. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The long value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(long src) => put((ulong)src);
 
+            /// <summary>
+            /// Puts a nullable long (Int64) value into the buffer. Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable long value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(long? src) => put((ulong)src!.Value);
 
+            /// <summary>
+            /// Puts a nullable unsigned long (UInt64) value into the buffer. Assumes value is not null and sufficient space.
+            /// </summary>
+            /// <param name="src">The nullable unsigned long value to put. Must have a value.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(ulong? src) => put(src!.Value);
 
+            /// <summary>
+            /// Puts an unsigned long (UInt64) value into the buffer using appropriate endianness. Assumes sufficient space.
+            /// </summary>
+            /// <param name="src">The unsigned long value to put.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void put(ulong src)
             {
@@ -2448,6 +3954,11 @@ namespace org.unirail{
             }
         }
 
+        /// <summary>
+        /// Implements equality comparison and hash code generation for `IList<T>` instances
+        /// based on their element-wise content and sequence.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the list.</typeparam>
         public class ArrayEqualHash<T> : IEqualityComparer<IList<T>>{
             public bool Equals(IList<T>? x, IList<T>? y) => (x == null || y == null) ?
                                                                 x == y :
@@ -2458,6 +3969,12 @@ namespace org.unirail{
 
         private static readonly ConcurrentDictionary<object, object> pool = new();
 
+        /// <summary>
+        /// Gets a singleton instance of `ArrayEqualHash<T>` for the specified type `T`.
+        /// This comparer can be used for `IList<T>` instances where equality depends on element sequence and values.
+        /// </summary>
+        /// <typeparam name="T">The type of elements in the lists to be compared.</typeparam>
+        /// <returns>An `IEqualityComparer<IList<T>>` instance.</returns>
         public static IEqualityComparer<IList<T>> getArrayEqualHash<T>()
         {
             var t = typeof(T);
@@ -2468,43 +3985,121 @@ namespace org.unirail{
             return ret;
         }
 
+        /// <summary>
+        /// Interface for abstracting endianness-specific read and write operations on byte arrays.
+        /// </summary>
         interface Endianness{
+            /// <summary>
+            /// Reads a 16-bit signed integer (short) from a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The source byte array.</param>
+            /// <param name="index">The zero-based starting index in `src` to read from.</param>
+            /// <returns>The 16-bit signed integer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public short Int16(byte[] src, int index);
 
+            /// <summary>
+            /// Reads a 16-bit unsigned integer (ushort) from a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The source byte array.</param>
+            /// <param name="index">The zero-based starting index in `src` to read from.</param>
+            /// <returns>The 16-bit unsigned integer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public ushort UInt16(byte[] src, int index);
 
+            /// <summary>
+            /// Reads a 32-bit signed integer (int) from a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The source byte array.</param>
+            /// <param name="index">The zero-based starting index in `src` to read from.</param>
+            /// <returns>The 32-bit signed integer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public int Int32(byte[] src, int index);
 
+            /// <summary>
+            /// Reads a 32-bit unsigned integer (uint) from a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The source byte array.</param>
+            /// <param name="index">The zero-based starting index in `src` to read from.</param>
+            /// <returns>The 32-bit unsigned integer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public uint UInt32(byte[] src, int index);
 
+            /// <summary>
+            /// Reads a 64-bit signed integer (long) from a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The source byte array.</param>
+            /// <param name="index">The zero-based starting index in `src` to read from.</param>
+            /// <returns>The 64-bit signed integer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public long Int64(byte[] src, int index);
 
+            /// <summary>
+            /// Reads a 64-bit unsigned integer (ulong) from a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The source byte array.</param>
+            /// <param name="index">The zero-based starting index in `src` to read from.</param>
+            /// <returns>The 64-bit unsigned integer.</returns>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public ulong UInt64(byte[] src, int index);
 
+            /// <summary>
+            /// Writes a 16-bit signed integer (short) to a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The 16-bit signed integer to write.</param>
+            /// <param name="dst">The destination byte array.</param>
+            /// <param name="index">The zero-based starting index in `dst` to write to.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void Int16(short src, byte[] dst, int index);
 
+            /// <summary>
+            /// Writes a 16-bit unsigned integer (ushort) to a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The 16-bit unsigned integer to write.</param>
+            /// <param name="dst">The destination byte array.</param>
+            /// <param name="index">The zero-based starting index in `dst` to write to.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void UInt16(ushort src, byte[] dst, int index);
 
+            /// <summary>
+            /// Writes a 32-bit signed integer (int) to a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The 32-bit signed integer to write.</param>
+            /// <param name="dst">The destination byte array.</param>
+            /// <param name="index">The zero-based starting index in `dst` to write to.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void Int32(int src, byte[] dst, int index);
 
+            /// <summary>
+            /// Writes a 32-bit unsigned integer (uint) to a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The 32-bit unsigned integer to write.</param>
+            /// <param name="dst">The destination byte array.</param>
+            /// <param name="index">The zero-based starting index in `dst` to write to.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void UInt32(uint src, byte[] dst, int index);
 
+            /// <summary>
+            /// Writes a 64-bit signed integer (long) to a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The 64-bit signed integer to write.</param>
+            /// <param name="dst">The destination byte array.</param>
+            /// <param name="index">The zero-based starting index in `dst` to write to.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void Int64(long src, byte[] dst, int index);
 
+            /// <summary>
+            /// Writes a 64-bit unsigned integer (ulong) to a byte array at a given index, respecting the specific endianness.
+            /// </summary>
+            /// <param name="src">The 64-bit unsigned integer to write.</param>
+            /// <param name="dst">The destination byte array.</param>
+            /// <param name="index">The zero-based starting index in `dst` to write to.</param>
             [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
             public void UInt64(ulong src, byte[] dst, int index);
 
+            /// <summary>
+            /// Little-endian implementation of the `Endianness` interface.
+            /// </summary>
             private class LE : Endianness{
                 [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
                 public short Int16(byte[] src, int index) => Unsafe.ReadUnaligned<short>(ref src[index]);
@@ -2543,6 +4138,9 @@ namespace org.unirail{
                 public void UInt64(ulong src, byte[] dst, int index) => Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(new Span<byte>(dst, index, 8)), src);
             }
 
+            /// <summary>
+            /// Big-endian implementation of the `Endianness` interface.
+            /// </summary>
             private class BE : Endianness{
                 [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
                 public short Int16(byte[] src, int index) => BinaryPrimitives.ReverseEndianness(Unsafe.ReadUnaligned<short>(ref src[index]));
@@ -2581,18 +4179,49 @@ namespace org.unirail{
                 public void UInt64(ulong src, byte[] dst, int index) => Unsafe.WriteUnaligned(ref MemoryMarshal.GetReference(new Span<byte>(dst, index, 8)), BinaryPrimitives.ReverseEndianness(src));
             }
 
+            /// <summary>
+            /// Provides an `Endianness` implementation appropriate for the current system's architecture (Little or Big Endian).
+            /// This ensures that multi-byte numerical values are read from and written to byte arrays correctly.
+            /// </summary>
             public static readonly Endianness OK = BitConverter.IsLittleEndian ?
                                                        new LE() :
                                                        new BE();
         }
 
+        /// <summary>
+        /// Represents a boolean value that can also be null. Internally stored as a byte:
+        /// 0 for false, 1 for true, and 2 (see `NULL` constant) for null.
+        /// </summary>
         public struct NullableBool : IEquatable<NullableBool>{
+            /// <summary>
+            /// Initializes a new instance of the <see cref="NullableBool"/> struct to the null state.
+            /// </summary>
             public NullableBool() { }
 
+            /// <summary>
+            /// Initializes a new instance of the <see cref="NullableBool"/> struct with a specified boolean value.
+            /// </summary>
+            /// <param name="value">The boolean value.</param>
             public NullableBool(bool value) => Value = value;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="NullableBool"/> struct with a raw byte value
+            /// representing its state (0 for false, 1 for true, 2 for null).
+            /// </summary>
+            /// <param name="value">The byte value (0, 1, or 2).</param>
             public NullableBool(byte value) => this.value = value;
+
+            /// <summary>
+            /// The internal byte representation of the NullableBool state.
+            /// 0 = false, 1 = true, 2 (NULL) = null.
+            /// </summary>
             public byte value = NULL;
 
+            /// <summary>
+            /// Gets or sets the boolean value of this <see cref="NullableBool"/>.
+            /// Throws an exception if getting the value when it is null.
+            /// Setting a value makes `hasValue` true.
+            /// </summary>
             public bool Value
             {
                 get => value == 1;
@@ -2601,7 +4230,14 @@ namespace org.unirail{
                                                0);
             }
 
-            public bool hasValue  => value != NULL;
+            /// <summary>
+            /// Indicates whether the NullableBool has a value (not null).
+            /// </summary>
+            public bool hasValue => value != NULL;
+
+            /// <summary>
+            /// Sets the NullableBool to null state.
+            /// </summary>
             public void to_null() => value = NULL;
 
             public static bool operator ==(NullableBool? a, NullableBool? b) => a.HasValue == b.HasValue && (!a.HasValue || a!.Value.value == b!.Value.value);
@@ -2639,12 +4275,20 @@ namespace org.unirail{
 
             public static explicit operator byte(NullableBool a) => a.value;
             public static implicit operator NullableBool(byte a) => new NullableBool(a);
-            public const                    byte NULL = 2;
+
+            /// <summary>
+            /// Constant value representing a null state for the `NullableBool` struct.
+            /// </summary>
+            public const byte NULL = 2;
         }
 
         //Decoding table for base64
         private static readonly byte[] char2byte = new byte[256];
 
+        /// <summary>
+        /// Static constructor for the `AdHoc` class. This initializes a lookup table for base64 decoding.
+        /// This table allows quick lookup of the numerical value of each base64 character.
+        /// </summary>
         static AdHoc()
         {
             for( int i = 'A'; i <= 'Z'; i++ )
@@ -2658,13 +4302,13 @@ namespace org.unirail{
         }
 
         ///<summary>
-        ///Decodes base64 encoded bytes in place.
+        ///Decodes a base64 encoded byte array in-place, modifying the original array.
         ///</summary>
-        ///<param name="bytes">The byte array containing the base64 encoded bytes.</param>
-        ///<param name="src_index">The starting index in the source array to begin decoding.</param>
-        ///<param name="dst_index">The starting index in the destination array to place decoded bytes.</param>
-        ///<param name="len">The length of the base64 encoded bytes to decode.</param>
-        ///<returns>The length of the decoded bytes.</returns>
+        ///<param name="bytes">The byte array containing the base64 encoded data.</param>
+        ///<param name="src_index">The index in `bytes` where the base64 encoded data starts.</param>
+        ///<param name="dst_index">The index in `bytes` where the decoded data will be written.</param>
+        ///<param name="len">The number of base64 characters to decode.</param>
+        ///<returns>The number of bytes written to the decoded data.</returns>
         public static int base64decode(byte[] bytes, int src_index, int dst_index, int len)
         {
             var max = src_index + len;
@@ -2703,6 +4347,11 @@ namespace org.unirail{
             return dst_index;
         }
 
+        /// <summary>
+        /// Retrieves a set of TXT records from DNS for a given key, returning the values as a byte array.
+        /// </summary>
+        /// <param name="key">The DNS key to query.</param>
+        /// <returns>An array of `Memory<byte>` representing the TXT record values associated with the key, or null if the lookup fails.</returns>
         //Using DNS as readonly key-value storage https://datatracker.ietf.org/doc/html/rfc1035
         public static Memory<byte>[] value(string key)
         {
@@ -2813,11 +4462,13 @@ namespace org.unirail{
             return null;
         }
 
-        // <summary>
-        /// Calculates the number of bytes required to encode a span of characters using varint encoding.
+        /// <summary>
+        /// Calculates the number of bytes required to varint encode a span of characters.
+        /// Varint encoding uses variable numbers of bytes to represent integers, optimizing for small numbers.
+        /// Each character may require 1, 2, or 3 bytes.
         /// </summary>
-        /// <param name="src">The span of characters to be encoded.</param>
-        /// <returns>The total number of bytes required for varint encoding.</returns>
+        /// <param name="src">The ReadOnlySpan of characters to encode.</param>
+        /// <returns>The estimated number of bytes needed to varint-encode the characters in `src`.</returns>
         public static int varint_bytes(ReadOnlySpan<char> src)
         {
             var bytes = 0;
@@ -2831,10 +4482,11 @@ namespace org.unirail{
         }
 
         /// <summary>
-        /// Counts the number of characters that can be represented by a span of bytes in varint encoding.
+        /// Counts the number of characters represented by a varint-encoded byte span.
+        ///  Varint encoding represents each character via 1 to 3 bytes.
         /// </summary>
         /// <param name="src">The span of bytes in varint encoding.</param>
-        /// <returns>The number of characters that can be represented by the input bytes.</returns>
+        /// <returns>The number of characters encoded by the `src` bytes.</returns>
         public static int varint_chars(ReadOnlySpan<byte> src)
         {
             var chars = 0;
@@ -2846,22 +4498,21 @@ namespace org.unirail{
 
         /// <summary>
         /// Encodes a portion of a string into a byte array using varint encoding.
+        /// Each character is represented by one, two, or three bytes.
+        /// This function is used in the `Transmitter`'s implementation.
         /// </summary>
         /// <param name="src">The source string to encode.</param>
         /// <param name="dst">The destination byte array.</param>
         /// <returns>
-        /// A 64-bit unsigned integer containing two pieces of information:
-        /// - High 32 bits: The index in the source string of the first character not processed (i.e., the next character to be encoded if the operation were to continue).
-        /// - Low 32 bits: The number of bytes written to the destination array.
-        ///
-        /// To extract these values:
-        /// - Next character to process: (int)(result >> 32)
-        /// - Bytes written: (int)(result & 0xFFFFFFFF)
+        /// A 64-bit unsigned integer. This combines two pieces of information:
+        /// - High 32 bits: The index in the source string (`src`) of the next character *not* yet processed.  If all characters
+        /// were encoded, this will equal `src.Length`.
+        /// - Low 32 bits: The number of bytes written to the `dst` byte array.
         /// </returns>
         public static ulong varint(ReadOnlySpan<char> src, Span<byte> dst)
         {
             var src_from = 0;
-            var dst_from   = 0;
+            var dst_from = 0;
 
             // Iterate through the source string, starting from the specified index
             for( int dst_max = dst.Length, src_max = src.Length, ch; src_from < src_max; src_from++ )
@@ -2899,19 +4550,22 @@ namespace org.unirail{
         }
 
         /// <summary>
-        /// Decodes a portion of a byte array into a string using varint decoding.
+        /// Decodes a sequence of varint-encoded bytes into a string, appending the result to the provided StringBuilder.
+        /// This is the complimentary of the `varint(ReadOnlySpan<char> src, Span<byte> dst)` method.
+        /// This function is used in the `Receiver`'s implementation.
         /// </summary>
-        /// <param name="src">The source byte array to decode.</param>
-        /// <param name="ret">A 32-bit integer containing two pieces of information:
-        ///     - Low 16 bits: The partial character value from a previous call (if any).
-        ///     - High 16 bits: The number of bits already processed for the partial character.
+        /// <param name="src">The input byte array containing varint-encoded data.</param>
+        /// <param name="ret">An integer, used to carry over state from a previous call to this function
+        /// (for multi-byte characters that were only partially decoded in a previous call).
+        /// - Low 16 bits: Contains the partial character being decoded (if incomplete).
+        /// - High 8 bits: The number of bits processed for the current partial character (from previous call).
         /// </param>
-        /// <param name="dst">The StringBuilder to append the decoded characters to.</param>
+        /// <param name="dst">The StringBuilder to which the decoded characters are appended.</param>
         /// <returns>
-        /// A 32-bit integer containing two pieces of information:
-        /// - Low 16 bits: The partial character value (if decoding is incomplete).
-        /// - High 8 bits: The number of bits processed for the partial character.
-        /// This return value can be used as the 'ret' parameter in a subsequent call to continue decoding.
+        /// An integer, to be used as `ret` in a subsequent call if decoding isn't finished.
+        /// - Low 16 bits: If a character is only partially decoded (e.g. 2 bytes), these bits contain
+        /// the partially decoded character.
+        /// - High 8 bits: Number of bits processed for a partial character.
         /// </returns>
         public static int varint(ReadOnlySpan<byte> src, int ret, StringBuilder dst)
         {
@@ -2938,6 +4592,114 @@ namespace org.unirail{
 
             // Return the current state (partial character and shift) for potential continuation
             return s << 16 | ch;
+        }
+
+        /// <summary>
+        /// Creates a Boyer-Moore pattern table to optimize case-sensitive string searches.
+        /// This table is used by the `boyer_moore_ASCII_Case_sensitive` and `boyer_moore_ASCII_Case_insensitive` methods.
+        /// </summary>
+        /// <param name="src">The search pattern string.</param>
+        /// <returns>An array of uints representing the pattern table.</returns>
+        public static uint[] boyer_moore_pattern(string src)
+        {
+            var ret = new uint[src.Length];
+            for( var i = src.Length; -1 < --i; )
+                if( ret[i] == 0 )
+                    for( int ii = i, ch = src[i], p = i << 8 | ch; -1 < ii; ii-- )
+                        if( src[ii] == ch )
+                            ret[ii] = (uint)p;
+            return ret;
+        }
+
+        /// <summary>
+        /// Performs a Boyer-Moore search for a case-sensitive match of a pattern in a byte array.
+        /// </summary>
+        /// <param name="bytes">The byte array to search within.</param>
+        /// <param name="pattern">The Boyer-Moore pattern table generated for the search pattern.</param>
+        /// <returns>The index of the last byte of the first match of the pattern in the byte array, or -1 if not found.</returns>
+        // Case-sensitive
+        public static int boyer_moore_ASCII_Case_sensitive(byte[] bytes, uint[] pattern) //return pattern's last byte position in the `bytes`
+        {
+            for( int len = pattern.Length, i = len - 1, max = bytes.Length - len + 1; i < max; )
+            {
+                for( var j = len; -1 < --j; )
+                {
+                    var p = pattern[j];
+
+                    if( (byte)p == bytes[i + j] ) continue; // Compare characters
+
+                    // Use the last occurrence to determine how far to skip
+                    var last = p >>> 8; // Extract last occurrence position
+                    i += (int)Math.Max(1, j - last);
+                    goto next;
+                }
+
+                return i; //return found pattern's last byte position in the `bytes`
+                next: ;
+            }
+
+            return -1; // Pattern not found
+        }
+
+        /// <summary>
+        /// Performs a Boyer-Moore search for a case-insensitive match of a pattern in a byte array.
+        /// </summary>
+        /// <param name="bytes">The byte array to search within.</param>
+        /// <param name="pattern">The Boyer-Moore pattern table generated for the search pattern.</param>
+        /// <returns>The index of the last byte of the first match of the pattern in the byte array, or -1 if not found.</returns>
+        // Case-insensitive
+        public static int boyer_moore_ASCII_Case_insensitive(byte[] bytes, uint[] pattern) //return pattern's last byte position in the `bytes`
+        {
+            for( int len = pattern.Length, i = len - 1, max = bytes.Length - len + 1; i < max; )
+            {
+                for( var j = len; -1 < --j; )
+                {
+                    var p = pattern[j];
+
+                    switch( (sbyte)p - bytes[i + j] )
+                    {
+                        case 0:
+                            continue;
+                        case 32:
+                            if( 'a' <= p ) continue;
+                            break;
+                        case -32:
+                            if( 'A' <= p ) continue;
+                            break;
+                    }
+
+                    // Use the last occurrence to determine how far to skip
+                    var last = p >>> 8; // Extract last occurrence position
+                    i += (int)Math.Max(1, j - last);
+                    goto next;
+                }
+
+                return i; //return found pattern's last byte position in the `bytes`
+                next: ;
+            }
+
+            return -1; // Pattern not found
+        }
+
+        /// <summary>
+        /// Calculates the next power of 2 greater than or equal to the input value.
+        /// This uses a bitwise trick to compute powers of two efficiently.
+        /// Method is aggressively inlined for best performance.
+        /// </summary>
+        /// <param name="v">The input value.</param>
+        /// <returns>The next power of 2 greater than or equal to v.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)] // Inline for performance
+        public static long NextPowerOf2(long v)
+        {
+            v--;
+            v |= v >> 1;
+            v |= v >> 2;
+            v |= v >> 4;
+            v |= v >> 8;
+            v |= v >> 16;
+            v |= v >> 32;
+            v++;
+            return v;
         }
     }
 }

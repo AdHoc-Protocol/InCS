@@ -1,112 +1,176 @@
-﻿//  MIT License
+// Copyright 2025 Chikirev Sirguy, Unirail Group
 //
-//  Copyright © 2020 Chikirev Sirguy, Unirail Group. All rights reserved.
-//  For inquiries, please contact:  al8v5C6HU4UtqE9@gmail.com
-//  GitHub Repository: https://github.com/AdHoc-Protocol
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//  Permission is hereby granted, free of charge, to any person obtaining a copy
-//  of this software and associated documentation files (the "Software"), to use,
-//  copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-//  the Software, and to permit others to do so, under the following conditions:
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
-//  1. The above copyright notice and this permission notice must be included in all
-//     copies or substantial portions of the Software.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
-//  2. Users of the Software must provide a clear acknowledgment in their user
-//     documentation or other materials that their solution includes or is based on
-//     this Software. This acknowledgment should be prominent and easily visible,
-//     and can be formatted as follows:
-//     "This product includes software developed by Chikirev Sirguy and the Unirail Group
-//     (https://github.com/AdHoc-Protocol)."
-//
-//  3. If you modify the Software and distribute it, you must include a prominent notice
-//     stating that you have changed the Software.
-//
-//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-//  FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
-//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
-//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
-//  OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-//  SOFTWARE.
+// For inquiries, please contact: al8v5C6HU4UtqE9@gmail.com
+// GitHub Repository: https://github.com/AdHoc-Protocol
+
+using System;
 using System.Threading;
 
 namespace org.unirail.collections;
-public class RingBuffer<T>
-{
-    // Buffer to hold the data
-    private readonly T[] buffer;
-    // Mask for wrapping around the buffer
+
+/// <summary>
+/// Implements a lock-free, fixed-size ring buffer for efficient data exchange.
+/// A ring buffer is a data structure that uses a single, fixed-size buffer as if it were connected end-to-end.
+/// It is useful for buffering data streams, inter-thread communication, and FIFO (First-In, First-Out) data handling.
+/// This implementation uses a power-of-two buffer size and bitwise operations for fast index wrapping.
+/// For multi-threaded access, it uses a spin-lock in <see cref="GetMultiThreaded"/> and <see cref="PutMultiThreaded"/>.
+/// </summary>
+/// <remarks>
+/// The spin-lock used in multi-threaded methods is suitable for low-contention scenarios. For high-contention environments,
+/// consider more advanced synchronization or lock-free algorithms to avoid spin-wait overhead.
+/// </remarks>
+/// <typeparam name="T">The type of data stored in the ring buffer.</typeparam>
+public class RingBuffer<T>{
+    private readonly T[]  buffer;
     private readonly uint mask;
-    // Constant for the delay in spin wait
-    private const int SpinWaitDelay = 10;
-    // Lock state for synchronization
-    private volatile int lockState;
-    // Read index for the buffer
+    private const    int  SpinWaitDelay = 10;
+    private volatile int  lockState;
     private volatile uint readIndex;
-    // Write index for the buffer
     private volatile uint writeIndex;
 
-    // Constructor that initializes the buffer and mask
-    public RingBuffer(int powerOfTwo) => buffer = new T[(mask = (1U << powerOfTwo) - 1) + 1];
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RingBuffer{T}"/> class with a buffer size of 2^powerOfTwo.
+    /// </summary>
+    /// <param name="powerOfTwo">The exponent to determine the buffer size (2^powerOfTwo). Must be between 0 and 30.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="powerOfTwo"/> is negative or exceeds 30.</exception>
+    public RingBuffer(int powerOfTwo)
+    {
+        if( powerOfTwo < 0 || powerOfTwo > 30 )
+            throw new ArgumentOutOfRangeException(nameof(powerOfTwo), "Power of two must be between 0 and 30.");
 
-    // Property to get the length of the buffer
-    public int Length  => buffer.Length;
+        var size = 1U << powerOfTwo;
+        mask   = size - 1;
+        buffer = new T[size];
+    }
 
-    // Property to get the size of the buffer
-    public int Count  => (int)(writeIndex - readIndex);
+    /// <summary>
+    /// Gets the total capacity of the ring buffer.
+    /// </summary>
+    public int Length => buffer.Length;
 
-    // Method to get data from the buffer in a multithreaded environment
+    /// <summary>
+    /// Gets the current number of elements in the ring buffer.
+    /// </summary>
+    public int Count => (int)(writeIndex - readIndex);
+
+    /// <summary>
+    /// Retrieves data from the ring buffer in a multi-threaded environment using a spin-lock.
+    /// </summary>
+    /// <param name="value">Receives the value read from the buffer, if successful.</param>
+    /// <returns>True if data was retrieved; false if the buffer is empty.</returns>
     public bool GetMultiThreaded(ref T value)
     {
-        // Spin wait until the lock is free
-        while (Interlocked.Exchange(ref lockState, 1) == 1) Thread.SpinWait(SpinWaitDelay);
-        // Get the data from the buffer
-        var result = Get(ref value);
-        // Release the lock
-        lockState = 0;
-        return result;
+        if( IsEmpty ) return false; // Early check to avoid unnecessary locking
+
+        while( Interlocked.CompareExchange(ref lockState, 1, 0) == 1 )
+            Thread.SpinWait(SpinWaitDelay);
+
+        try { return Get(ref value); }
+        finally { lockState = 0; }
     }
 
-    // Method to get data from the buffer
+    /// <summary>
+    /// Retrieves data from the ring buffer in a single-threaded or thread-safe context.
+    /// </summary>
+    /// <param name="value">Receives the value read from the buffer, if successful.</param>
+    /// <returns>True if data was retrieved; false if the buffer is empty.</returns>
     public bool Get(ref T value)
     {
-        // If the read and write indices are the same, the buffer is empty
-        if (readIndex == writeIndex) return false;
-        // Get the data from the buffer and increment the read index
-        value = buffer[(int)readIndex++ & mask];
+        if( readIndex == writeIndex ) return false;
+
+        value = buffer[readIndex & mask];
+        readIndex++;
         return true;
     }
 
-    // Method to put data into the buffer in a multithreaded environment
+    /// <summary>
+    /// Peeks at the next item in the ring buffer without removing it, in a multi-threaded environment.
+    /// </summary>
+    /// <param name="value">Receives the value at the read index, if available.</param>
+    /// <returns>True if an item was peeked; false if the buffer is empty.</returns>
+    public bool PeekMultiThreaded(ref T value)
+    {
+        if( IsEmpty ) return false;
+
+        while( Interlocked.CompareExchange(ref lockState, 1, 0) == 1 )
+            Thread.SpinWait(SpinWaitDelay);
+
+        try { return Peek(ref value); }
+        finally { lockState = 0; }
+    }
+
+    /// <summary>
+    /// Peeks at the next item in the ring buffer without removing it.
+    /// </summary>
+    /// <param name="value">Receives the value at the read index, if available.</param>
+    /// <returns>True if an item was peeked; false if the buffer is empty.</returns>
+    public bool Peek(ref T value)
+    {
+        if( readIndex == writeIndex ) return false;
+
+        value = buffer[readIndex & mask];
+        return true;
+    }
+
+    /// <summary>
+    /// Adds data to the ring buffer in a multi-threaded environment using a spin-lock.
+    /// </summary>
+    /// <param name="value">The data to add to the buffer.</param>
+    /// <returns>True if data was added; false if the buffer is full.</returns>
     public bool PutMultiThreaded(T value)
     {
-        // If the buffer is full, return false
-        if (buffer.Length <= Count) return false;
-        // Spin wait until the lock is free
-        while (Interlocked.Exchange(ref lockState, 1) == 1) Thread.SpinWait(SpinWaitDelay);
-        // Put the data into the buffer
-        var result = Put(value);
-        // Release the lock
-        lockState = 0;
-        return result;
+        if( IsFull ) return false;
+
+        while( Interlocked.CompareExchange(ref lockState, 1, 0) == 1 )
+            Thread.SpinWait(SpinWaitDelay);
+
+        try { return Put(value); }
+        finally { lockState = 0; }
     }
 
-    // Method to put data into the buffer
+    /// <summary>
+    /// Adds data to the ring buffer in a single-threaded or thread-safe context.
+    /// </summary>
+    /// <param name="value">The data to add to the buffer.</param>
+    /// <returns>True if data was added; false if the buffer is full.</returns>
     public bool Put(T value)
     {
-        // If the buffer is full, return false
-        if (buffer.Length <= Count) return false;
-        // Put the data into the buffer and increment the write index
-        buffer[(int)writeIndex++ & mask] = value;
+        if( IsFull ) return false;
+
+        buffer[writeIndex & mask] = value;
+        writeIndex++;
         return true;
     }
 
-    // Method to clear the buffer
+    /// <summary>
+    /// Clears the ring buffer by resetting the read and write indices.
+    /// </summary>
     public void Clear()
     {
-        // Reset the read and write indices
-        readIndex = 0;
+        readIndex  = 0;
         writeIndex = 0;
+        if( typeof(T).IsClass ) Array.Clear(buffer, 0, buffer.Length);
     }
+
+    /// <summary>
+    /// Gets a value indicating whether the ring buffer is full.
+    /// </summary>
+    public bool IsFull => writeIndex - readIndex >= (uint)buffer.Length;
+
+    /// <summary>
+    /// Gets a value indicating whether the ring buffer is empty.
+    /// </summary>
+    public bool IsEmpty => readIndex == writeIndex;
 }
