@@ -41,7 +41,7 @@ public interface NullablePrimitiveList<T> where T : struct{
     /// <para>
     /// It uses a <see cref="BitList.RW"/> to track null values efficiently and an array to store
     /// actual non-null values (Compressed) or all potential values (Flat). The storage strategy
-    /// switches dynamically based on the number of non-_nulls.
+    /// switches dynamically based on the number of non-nulls.
     /// </para>
     /// </summary>
     /// <typeparam name="T">The type of primitive values stored in the list (must be a struct).</typeparam>
@@ -58,11 +58,11 @@ public interface NullablePrimitiveList<T> where T : struct{
         /// Array storing the list's values.
         /// <para>
         /// - In <b>Compressed Strategy</b> (<see cref="isFlatStrategy"/> is <c>false</c>), stores only non-null values contiguously.
-        ///   The index in this array corresponds to the rank of the logical index in the <c>_nulls</c> bitlist.
+        ///   The index in this array corresponds to the rank of the logical index in the <c>nulls</c> bitlist.
         /// </para>
         /// <para>
         /// - In <b>Flat Strategy</b> (<see cref="isFlatStrategy"/> is <c>true</c>), stores all elements (including placeholders
-        ///   for _nulls, typically <c>default(T)</c>). The index in this array is the same as the logical index.
+        ///   for nulls, typically <c>default(T)</c>). The index in this array is the same as the logical index.
         /// </para>
         /// </summary>
         protected T[] values = [];
@@ -72,8 +72,8 @@ public interface NullablePrimitiveList<T> where T : struct{
         /// Number of non-null elements in the list.
         /// In <b>Compressed Strategy</b>, this field explicitly tracks the count and is the effective size
         /// of the used portion of the <see cref="values"/> array.
-        /// In <b>Flat Strategy</b>, this field is not actively maintained for count; the number of non-_nulls
-        /// is derived dynamically from <c>_nulls.Cardinality</c>. This field is primarily relevant
+        /// In <b>Flat Strategy</b>, this field is not actively maintained for count; the number of non-nulls
+        /// is derived dynamically from <c>nulls.Cardinality()</c>. This field is primarily relevant
         /// for the Compressed strategy and the strategy switching threshold check.
         /// </summary>
         protected int cardinality = 0;
@@ -570,9 +570,23 @@ public interface NullablePrimitiveList<T> where T : struct{
     /// dynamically switching between Compressed and Flat storage strategies.
     /// </para>
     /// </summary>
-    /// <typeparam name="T">The type of primitive values stored in the list (must be a struct).</typeparam>
-    class RW : R, IList<T?>{
-        public RW(int potentialItemsCount) => nulls = new BitList.RW(potentialItemsCount); //items - not capacity
+      class RW : R, IList<T?>{
+          /// <summary>
+          /// Initializes a new instance of the <see cref="RW"/> list with a specified initial capacity and initial size.
+          /// </summary>
+          /// <param name="items">
+          /// The initial capacity. This determines the number of elements the list can hold without resizing.
+          /// </param>
+          /// <remarks>
+          /// If <paramref name="items"/> is positive, the list is initialized with that capacity and a logical Count of 0 (empty).
+          /// <para/>
+          /// If <paramref name="items"/> is negative, the list is initialized with a capacity and a logical size equal to the absolute value of <paramref name="items"/> (<c>-items</c>).
+          /// In this case, the list will contain <c>-items</c> elements, all initially set to <c>null</c>.
+          /// </remarks>
+
+        public RW(int items) => nulls = -1 < items ?
+                                            new BitList.RW(items) :        // items is capacity
+                                            new BitList.RW(false, -items); // -items is capacity and Count of null items
 
 
         /// <summary>
@@ -1039,7 +1053,7 @@ public interface NullablePrimitiveList<T> where T : struct{
         /// <para>
         /// Setting a value at an index less than <see cref="Count"/> updates the existing element.
         /// Setting a value at an index greater than or equal to <see cref="Count"/> extends the list
-        /// to include elements up to <paramref name="index"/>, filling any intermediate indices with _nulls
+        /// to include elements up to <paramref name="index"/>, filling any intermediate indices with nulls
         /// before setting the value at <paramref name="index"/>.
         /// </para>
         /// </summary>

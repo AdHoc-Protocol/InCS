@@ -606,17 +606,21 @@ public interface NullableObjectList<T> where T : class{
         /// The list starts in the compressed strategy with a logical count of zero.
         /// </summary>
         /// <param name="equal_hash_V">The equality comparer for type <typeparamref name="T"/>. If <c>null</c>, the default comparer is used.</param>
-        /// <param name="capacity">The initial allocated capacity for the internal storage structures (<see cref="BitList.RW"/> and <see cref="values"/> array).</param>
+        /// <param name="items">The initial capacity for the internal {@code values} array, which determines the
+        ///                     number of elements  the list can hold without resizing.
+        ///                     If positive, it sets the initial capacity.
+        ///                     If negative, the list is initialized with a capacity and size of {@code -items},
+        ///                     filled  with null elements..</param>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="capacity"/> is negative.</exception>
-        public RW(EqualityComparer<T> equal_hash_V, int capacity) : base(equal_hash_V)
+        public RW(EqualityComparer<T> equal_hash_V, int items) : base(equal_hash_V)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(capacity);
-            nulls = new BitList.RW(capacity);
-            values = capacity > 0 ?
-                         new T[Math.Max(16, capacity)] : // Allocate values array with initial capacity
-                         [];
-            size_card      = 0;     // Initially empty, size_card reflects cardinality (0) in compressed
-            isFlatStrategy = false; // Start in compressed mode
+            var length = Math.Abs( items );
+            nulls = new BitList.RW(length);
+            values = length == 0 ?
+                         [] :
+                         new T[Math.Max(16, length)]; // Allocate values array with initial capacity
+
+            if( items < 0 ) Set1( -items - 1, null ); // + set size
         }
 
 

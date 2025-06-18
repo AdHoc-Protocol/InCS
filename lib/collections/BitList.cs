@@ -1462,6 +1462,18 @@ public interface BitList{
             return this;
         }
 
+        public RW Set<T>(int index, params T[] values) where T : struct
+        {
+            if( index < 0 ) return this;
+            var end                 = index + values.Length;
+            if( count < end ) count = end;
+            var comparer            = EqualityComparer<T>.Default;
+            for( var i = 0; i < values.Length; i++ )
+                if( comparer.Equals(values[i], default) ) Set0(index + i);
+                else Set1(index                                      + i);
+            return this;
+        }
+
         /// <summary>
         /// Sets a sequence of bits starting at a specified index, using values from a
         /// boolean array.
